@@ -1,0 +1,76 @@
+The application's purpose is to assist users with building a deck of cards for any game
+
+Since the data is going to not conform to a single game it will need to take advantage of a no sql database such as mongo db
+
+it will likely need a few collections within the database
+
+one will be for the cards and their attributes
+
+one will be for keeping track of which games have which attributes on their cards
+ie a table of metadata for the application to determine how to read the cards appropriately
+
+one will be for allowing the user to store decks they have made using the application
+
+one will be for keeping track of the user's available collection in the game ie what cards they own
+
+
+
+the card table will probably need a few common columns such as the
+
+- the name of the card
+- the filepath to the card art (in v1 this can be skipped since its not required for the application to function)
+- the type of card (card types are pretty universal in games)
+- json blob of rules text (since card interactions/functions are so varied between games it will need to be interpreted according to the metadata)
+- max number of this card in a deck
+
+the game metadata table will need some columns like
+
+- the max number of cards in a deck
+- the minimum number of cards in a deck
+- a json blob of other deck restrictions
+- and a "schema" for how to interpret the rules text and or other attributes in the json blob
+
+the last 2 tables should be simple
+ie just a list of user ids deck ids and card ids like a normal sql table would do it
+
+
+
+The interface will be a webinterface since they are the easiest to build and integrate
+
+the interface will need a few pages/panels
+
+a deck building page displaying all the cards in the game on a panel
+- with apt filtering to easily find cards
+
+a page displaying all the user's decks
+
+a page showing the game deck rules and a way to edit them
+
+
+
+To test it I want to try to use the data from the games
+Umamusume: Pretty Derby
+Eternal Card game
+
+since the games decks cards and rules are wildly different
+
+Eternal's cards would just need one blob for their rules text but Umamusume's cards would likely need multiple
+since those cards have
+- skills
+- passive effects
+- a set of associated characters (which matters for deck limitations)
+- a unique passive effect
+- event trees (i personally wouldnt filter by these because they are so varied but it is useful to see this information)
+
+so first before any specific design decisions are made this needs document needs to be transformed into a nice well-thought-out design document that details the purpose of the application as a whole and its individual parts
+and some of those details also need to be determined ie what the schema for the json blob will be
+it should be split into multiple documents
+ie one overview
+one for the underlying architecture
+one for the ui design etc...
+
+also each feature needs a priority
+ie getting the deck building based on all existing cards is more important than making the application complete with all the card art, logins for user's saving their personal decks etc...
+the most important part is ensuring I can build and tinker on a single deck using a complicated filtering system against the complete set of cards for a game
+
+import export features would also be nice but that is a low prio feature to think about

@@ -1,0 +1,6 @@
+150 cards maximum
+75 cards minimum
+1/3 of all the cards in the deck must be power cards
+Only 4 of the same card can exist in a deck (except for power sigils)
+
+Only 5 cards can exist in the "market" and there can be no dupes in the market

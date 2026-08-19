@@ -1,0 +1,10 @@
+Min and max size of a deck is 6 cards
+5 of them you must own and 1 must be from another user's account (for the application this can probably be ignored)
+
+Every card has to be unique
+
+you cannot use two cards that are associated with the same character
+ie if card A is associated with characters A and B and card B is associated with character B then only one of those cards can exist in the deck
+
+the character that the deck is intended for can also not exist in the deck
+ie if the deck is for character A I cannot use any card associated with character A in the deck
