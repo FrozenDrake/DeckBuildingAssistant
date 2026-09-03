@@ -1,0 +1,46 @@
+{
+  "game_id": "6a987e922df6d32561063d21",
+  "slots": [
+    {
+      "count": 3,
+      "filters": {
+        "type": "rule",
+        "field": "type",
+        "operator": "equals",
+        "value": "Speed"
+      }
+    },
+    {
+      "count": 2,
+      "filters": {
+        "type": "rule",
+        "field": "type",
+        "operator": "equals",
+        "value": "Stamina"
+      }
+    },
+    {
+      "count": 1,
+      "filters": {
+        "type": "rule",
+        "field": "type",
+        "operator": "equals",
+        "value": "Wisdom"
+      }
+    }
+  ],
+  "scoring": [
+    {
+      "weight": 10,
+      "filters": {
+        "type": "rule",
+        "field": "rarity",
+        "operator": "equals",
+        "value": "SSR"
+      }
+    }
+  ],
+  "global_rules": {
+    "banned_characters": ["Special Week"]
+  }
+}
