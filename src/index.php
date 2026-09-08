@@ -18,20 +18,24 @@
         <div class="top-bar">
             <user-auth></user-auth>
             <theme-selector></theme-selector>
-            <toast-notifications></toast-notifications>
-    </div>
+        </div>
 
         <!-- Main Workspace -->
         <div class="main-content">
-            <template v-if="!store.selectedGameId">
+            <template v-if="store.currentView === 'admin'">
+                <admin-dashboard></admin-dashboard>
+            </template>
+            <template v-else-if="!store.selectedGameId">
                 <landing-page></landing-page>
             </template>
             <template v-else>
                 <game-dashboard v-if="store.currentView === 'dashboard'"></game-dashboard>
                 <deck-builder v-if="store.currentView === 'deck-builder'"></deck-builder>
+                <browse-decks v-if="store.currentView === 'browse-decks'"></browse-decks>
+                <manage-collection v-if="store.currentView === 'manage-collection'"></manage-collection>
             </template>
-            <toast-notifications></toast-notifications>
-    </div>
+        </div>
+
         <toast-notifications></toast-notifications>
     </div>
 

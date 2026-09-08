@@ -42,6 +42,30 @@ export const store = reactive({
     
     removeToast(id) {
         this.toasts = this.toasts.filter(t => t.id !== id);
+    },
+
+    // Auth methods
+    async checkAuth() {
+        try {
+            const res = await fetch('api/me.php');
+            if (res.ok) {
+                const data = await res.json();
+                this.user = data.user;
+            } else {
+                this.user = null;
+            }
+        } catch (err) {
+            this.user = null;
+        }
+    },
+    
+    get isAdmin() {
+        return this.user && this.user.admin_games && this.user.admin_games.length > 0;
+    },
+    
+    isAdminOfGame(gameId) {
+        if (!this.user || !this.user.admin_games) return false;
+        return this.user.admin_games.includes(gameId);
     }
 });
 

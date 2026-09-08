@@ -31,8 +31,8 @@ export default {
                     <p>Create, edit, and analyze your decks.</p>
                 </div>
 
-                <!-- Rules Editor -->
-                <div class="dashboard-card card" @click="navigate('rules-editor')">
+                <!-- Admin Dashboard (replaces Rules Editor) -->
+                <div class="dashboard-card card" v-if="store.isAdminOfGame(currentGame.id)" @click="navigate('admin')">
                     <div class="card-icon">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
@@ -40,8 +40,8 @@ export default {
                             <line x1="12" y1="8" x2="12.01" y2="8"></line>
                         </svg>
                     </div>
-                    <h3>Game Rules Editor</h3>
-                    <p>Modify and define the deck building restrictions.</p>
+                    <h3>Admin Dashboard</h3>
+                    <p>Manage game rules, schemas, and cards.</p>
                 </div>
 
                 <!-- Browse Decks -->

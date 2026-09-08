@@ -1,82 +1,12 @@
 import { store } from '../store.js';
-const { ref, computed, onMounted, watch } = Vue;
+const { ref, computed, onMounted, onUnmounted, watch } = Vue;
 
-// Traverse a dot-notation path into an object, safely returning undefined if any step is missing.
-// Example: getValueAtPath(card.raw_data, 'hints.hint_skills') -> [200162, 200232, ...]
 const getValueAtPath = (obj, path) => {
     if (!path || obj === undefined || obj === null) return undefined;
     return path.split('.').reduce((curr, key) => {
         if (curr === undefined || curr === null) return undefined;
         return curr[key];
     }, obj);
-};
-
-// The card schema drives the ComplexFilter and MultiSort field/operator options.
-// Fields map to card properties; operators define supported comparisons.
-// The special `raw_path` type allows dot-notation traversal into the raw_data blob.
-const buildFilterSchema = (rawPathOptions = []) => ({
-    fields: [
-        { label: 'Name',           key: 'name',        type: 'text' },
-        { label: 'Type',           key: 'type',        type: 'select', options: ['Speed', 'Stamina', 'Power', 'Guts', 'Wisdom', 'Friend', 'Group'] },
-        { label: 'Rarity',         key: 'rarity',      type: 'select', options: ['R', 'SR', 'SSR'] },
-        { label: 'Character',      key: 'characters',  type: 'text' },
-        // raw_path: dynamic paths extracted from raw_data
-        { label: 'Other Card Info',key: '__raw_path__', type: 'raw_path', options: rawPathOptions },
-    ],
-    operators: {
-        text:     ['contains', 'does not contain', 'equals'],
-        select:   ['equals', 'does not equal'],
-        number:   ['equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal'],
-        raw_path: ['contains', 'does not contain', 'equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal'],
-    }
-});
-
-// Evaluate a single filter rule against a card object.
-// Handles normal top-level fields AND raw_path lookups into raw_data.
-const matchesRule = (card, rule) => {
-    let raw;
-
-    if (rule.field === '__raw_path__') {
-        // Traverse into raw_data using the dot-path stored in rule.rawPath
-        raw = getValueAtPath(card.raw_data, rule.rawPath);
-    } else {
-        raw = card[rule.field];
-    }
-
-    // Normalise to a searchable string — arrays are joined so "contains" works across items
-    const haystack = Array.isArray(raw)
-        ? raw.map(v => String(v).toLowerCase()).join(' ')
-        : String(raw ?? '').toLowerCase();
-    const needle = String(rule.value ?? '').toLowerCase();
-
-    // Parse numbers for numeric operators
-    const numHaystack = Number(raw);
-    const numNeedle = Number(rule.value);
-
-    switch (rule.operator) {
-        case 'contains':               return haystack.includes(needle);
-        case 'does not contain':       return !haystack.includes(needle);
-        case 'equals':                 return haystack === needle;
-        case 'does not equal':         return haystack !== needle;
-        case 'greater than':           return !isNaN(numHaystack) && !isNaN(numNeedle) && numHaystack > numNeedle;
-        case 'less than':              return !isNaN(numHaystack) && !isNaN(numNeedle) && numHaystack < numNeedle;
-        case 'greater than or equal':  return !isNaN(numHaystack) && !isNaN(numNeedle) && numHaystack >= numNeedle;
-        case 'less than or equal':     return !isNaN(numHaystack) && !isNaN(numNeedle) && numHaystack <= numNeedle;
-        default:                       return true;
-    }
-};
-
-// Recursively evaluate a filter group node against a card.
-const matchesNode = (card, node) => {
-    if (node.type === 'rule') return matchesRule(card, node);
-    if (node.type === 'group') {
-        const results = (node.children || []).map(child => matchesNode(card, child));
-        const combined = node.logic === 'OR'
-            ? results.some(Boolean)
-            : results.every(Boolean);
-        return node.negate ? !combined : combined;
-    }
-    return true;
 };
 
 export default {
@@ -93,7 +23,7 @@ export default {
                         <button class="btn btn-outline" @click="showGeneratorModal = true">Auto-Generate</button>
                         <button class="btn btn-outline" @click="clearDeck" :disabled="deck.length === 0">Clear</button>
                         <button class="btn btn-outline">Export</button>
-                        <button class="btn">Save Deck</button>
+                        <button class="btn" @click="showSaveDeckModal = true" :disabled="deck.length === 0">Save Deck</button>
                         <button class="btn btn-outline" @click="store.currentView = 'dashboard'">Exit</button>
                     </div>
                 </div>
@@ -113,9 +43,13 @@ export default {
                             Filters{{ activeFilterCount > 0 ? ' (' + activeFilterCount + ')' : '' }}
                         </button>
 
-                        <label class="toggle-label">
-                            <input type="checkbox" v-model="showOwnedOnly" />
-                            Owned Only
+                        <!-- Collection filter: only show cards the user owns -->
+                        <label v-if="store.user" class="toggle-switch" title="Show only cards in your collection">
+                            <input type="checkbox" :checked="collectionOnly" @change="toggleCollectionOnly" />
+                            <span class="toggle-track">
+                                <span class="toggle-thumb"></span>
+                            </span>
+                            <span class="toggle-label">My Collection</span>
                         </label>
                     </div>
                 </div>
@@ -130,9 +64,8 @@ export default {
                 <!-- Complex Filter Tray -->
                 <transition name="filter-tray">
                     <div v-if="showFilterTray" class="filter-tray">
-                        <complex-filter :schema="filterSchema" @update:query="onQueryUpdated"></complex-filter>
+                        <complex-filter :schema="filterSchema" @query-updated="onQueryUpdated"></complex-filter>
                         <div class="filter-tray-footer">
-                            <span class="filter-result-count">{{ filteredCards.length }} cards match</span>
                             <button class="btn btn-sm btn-outline" @click="resetFilter">Clear Filters</button>
                         </div>
                     </div>
@@ -143,11 +76,12 @@ export default {
                 <!-- Card Collection Panel -->
                 <div class="card-collection-panel">
 
-                    <div v-if="isLoading" class="loading-state">Loading cards...</div>
-                    <div v-else-if="filteredCards.length === 0" class="loading-state">No cards match your filters.</div>
-                    <div v-else class="card-list">
-                        <div class="db-card" v-for="card in filteredCards" :key="card.id" @click="addToDeck(card)"
-                             :title="'Click to add to deck.\\n\\n' + card.description"
+                    <div v-if="isLoading && renderedCards.length === 0" class="loading-state">Loading cards from server...</div>
+                    <div v-else-if="renderedCards.length === 0" class="loading-state">No cards match your filters.</div>
+                    <div v-else class="card-list" ref="scrollContainer">
+                        
+                        <div class="db-card" v-for="card in renderedCards" :key="card.id" @click="addToDeck(card)"
+                             :title="'Click to add to deck.\\n\\n' + (card.description || '')"
                              :class="{ 'db-card-in-deck': isInDeck(card) }">
                             <div class="db-card-header">
                                 <span class="db-card-rarity" :class="card.rarity">{{ card.rarity }}</span>
@@ -158,6 +92,12 @@ export default {
                                 {{ card.characters.join(', ') }}
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- Scroll trigger -->
+                    <div ref="scrollTrigger" id="scroll-trigger" style="height: 50px; display: flex; align-items: center; justify-content: center; opacity: 0.5;">
+                        <span v-if="isLoading && renderedCards.length > 0">Loading more...</span>
+                        <span v-else-if="allLoaded && renderedCards.length > 0">Showing {{ renderedCards.length }} of {{ totalCards }} cards.</span>
                     </div>
                 </div>
 
@@ -206,67 +146,246 @@ export default {
                 @close="showGeneratorModal = false"
                 @generated="onDeckGenerated"
             ></deck-generator-modal>
+
+            <!-- Save Deck Modal -->
+            <transition name="modal-fade">
+                <div v-if="showSaveDeckModal" class="modal-overlay" @click.self="showSaveDeckModal = false">
+                    <div class="modal-box" style="max-width: 440px;">
+                        <h3 style="margin-top: 0;">Save Deck</h3>
+                        <p style="opacity: 0.6; font-size: 0.9em; margin-bottom: 20px;">
+                            Give your deck a name. It will be saved to your profile and visible on the Browse Decks page.
+                        </p>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display:block; margin-bottom: 5px; font-weight: bold;">Deck Name <span style="color:red">*</span></label>
+                            <input type="text" v-model="saveDeckName" class="filter-input" placeholder="e.g. My Speed Build" maxlength="80" />
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label style="display:block; margin-bottom: 5px; font-weight: bold;">Description <span style="opacity:0.5; font-weight: normal;">(optional)</span></label>
+                            <textarea v-model="saveDeckDescription" class="filter-input" placeholder="Describe your strategy..." style="height: 90px; font-family: inherit;"></textarea>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                            <button class="btn btn-outline" @click="showSaveDeckModal = false" :disabled="isSavingDeck">Cancel</button>
+                            <button class="btn btn-primary" @click="saveDeck" :disabled="isSavingDeck || !saveDeckName.trim()">
+                                {{ isSavingDeck ? 'Saving...' : 'Save Deck' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
         </div>
     `,
     setup() {
-        const cards = ref([]);
         const isLoading = ref(false);
         const searchQuery = ref('');
         const showSortTray = ref(false);
         const showFilterTray = ref(false);
-        const showOwnedOnly = ref(false);
+
         const activeFilterQuery = ref(null);
-        const activeSortRules = ref([]); // Ordered array of { field, direction } from MultiSort
-        // Dynamically compute all possible dot-notation paths from the raw JSON
-        const rawPathOptions = computed(() => {
-            if (!cards.value || cards.value.length === 0) return [];
-            const paths = new Set();
+        const activeSortRules = ref([]);
+
+        // Default schema items
+        const rawPathOptions = ref([]);
+
+        const buildFilterSchema = (game, dynamicPaths) => {
+            let fields = [];
             
-            const extract = (obj, prefix = '') => {
-                if (!obj || typeof obj !== 'object') return;
-                if (Array.isArray(obj)) return; // Stop at arrays (e.g. event_skills) rather than continuing to index 0, 1...
-                for (const key in obj) {
-                    const fullPath = prefix ? `${prefix}.${key}` : key;
-                    paths.add(fullPath);
-                    if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-                        extract(obj[key], fullPath);
-                    }
+            if (game && game.card_schema && game.card_schema.length > 0) {
+                fields = game.card_schema
+                    .filter(field => field.key !== 'image_url')
+                    .map(field => {
+                        return {
+                            key: field.key,
+                            label: field.label,
+                            // map backend 'string' to frontend 'text'
+                            type: field.type === 'string' ? 'text' : field.type, 
+                            options: field.options || []
+                        };
+                    });
+            } else {
+                // Fallback for games without a schema
+                fields = [
+                    { label: 'Name', key: 'name', type: 'text' }
+                ];
+            }
+            
+            // Append the dynamic raw_data paths extractor
+            fields.push({
+                label: 'Other Card Info',
+                key: '__raw_path__',
+                type: 'raw_path',
+                options: dynamicPaths
+            });
+            
+            return {
+                fields: fields,
+                operators: {
+                    text:     ['contains', 'does not contain', 'equals'],
+                    select:   ['equals', 'does not equal'],
+                    number:   ['equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal'],
+                    raw_path: ['contains', 'does not contain', 'equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal']
                 }
             };
+        };
 
-            cards.value.forEach(card => {
-                if (card.raw_data) extract(card.raw_data);
-            });
-
-            return Array.from(paths).sort().map(p => ({ label: p, value: p }));
-        });
-
-        const filterSchema = computed(() => buildFilterSchema(rawPathOptions.value));
+        const filterSchema = computed(() => buildFilterSchema(currentGame.value, rawPathOptions.value));
         const deck = ref([]);
 
         const currentGame = computed(() => store.games.find(g => g.id === store.selectedGameId) || {});
         const maxDeckSize = computed(() => currentGame.value.max_deck_size || 60);
         const isSmallDeck = computed(() => maxDeckSize.value <= 10);
 
-        // Numeric weight for rarity used when a sort rule targets the rarity field
-        const rarityOrder = { 'SSR': 3, 'SR': 2, 'R': 1 };
+        // Server-Side Data State
+        const cards = ref([]);
+        const totalCards = ref(0);
+        const skip = ref(0);
+        const limit = 50;
+        const allLoaded = computed(() => cards.value.length >= totalCards.value && totalCards.value > 0);
+        
+        // Virtual Scrolling State
+        
+        const maxCardsToKeep = 150; 
+        const renderedCards = computed(() => cards.value); // For now, we'll try just normal append.
+        
+        // ---- Collection filter toggle ----
+        const collectionOnly    = ref(false);
+        const collectionCardIds = ref(new Set());
 
-        const fetchCards = async () => {
+        const fetchCollection = async () => {
+            if (!store.user || !currentGame.value) return;
+            try {
+                const res = await fetch('api/get_collection.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: currentGame.value.id }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    collectionCardIds.value = new Set((data.entries || []).map(e => e.card_id));
+                }
+            } catch (_) { /* silently ignore — collection filter just won't work */ }
+        };
+
+        const toggleCollectionOnly = () => {
+            collectionOnly.value = !collectionOnly.value;
+            skip.value = 0;
+            cards.value = [];
+            performSearch(false);
+        };
+
+        let fetchAbortController = null;
+
+        const performSearch = async (isLoadMore = false) => {
             if (!currentGame.value.id) return;
+            
+            if (!isLoadMore) {
+                skip.value = 0;
+                cards.value = [];
+            }
+
+            if (fetchAbortController) fetchAbortController.abort();
+            fetchAbortController = new AbortController();
+
             isLoading.value = true;
             try {
-                // include_raw=1 fetches the full raw_data blob so filters/sorts can traverse it
-                const response = await fetch('api/get_cards.php?game_id=' + currentGame.value.id + '&include_raw=1');
-                cards.value = await response.json();
+                const payload = {
+                    game_id: currentGame.value.id,
+                    skip: skip.value,
+                    limit: limit,
+                    search: searchQuery.value,
+                    filters: activeFilterQuery.value,
+                    sorts: activeSortRules.value,
+                    include_raw: true,
+                    // When the collection filter is on, restrict results to owned card IDs.
+                    // An empty set means "no collection" — send null so backend doesn't add an impossible $in filter.
+                    ...(collectionOnly.value && collectionCardIds.value.size > 0
+                        ? { card_ids: Array.from(collectionCardIds.value) }
+                        : {}),
+                };
+
+                const response = await fetch('api/search_cards.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: fetchAbortController.signal
+                });
+                
+                const data = await response.json();
+                
+                if (data.cards) {
+                    // Extract schema paths dynamically from the first batch
+                    if (!isLoadMore) {
+                        const paths = new Set();
+                        const extract = (obj, prefix = '') => {
+                            if (!obj || typeof obj !== 'object') return;
+                            for (const key in obj) {
+                                const fullPath = prefix ? prefix + '.' + key : key;
+                                if (typeof obj[key] === 'number' || typeof obj[key] === 'string') {
+                                    paths.add(fullPath);
+                                }
+                                extract(obj[key], fullPath);
+                            }
+                        };
+                        data.cards.forEach(card => {
+                            if (card.raw_data) extract(card.raw_data);
+                        });
+                        rawPathOptions.value = Array.from(paths).sort().map(p => ({ label: p, value: p }));
+                    }
+
+                    totalCards.value = data.total;
+                    
+                    if (isLoadMore) {
+                        cards.value = [...cards.value, ...data.cards];
+                    } else {
+                        cards.value = data.cards;
+                    }
+                }
             } catch (err) {
-                console.error('Failed to fetch cards:', err);
+                if (err.name === 'AbortError') return;
+                console.error('Failed to search cards:', err);
             } finally {
                 isLoading.value = false;
             }
         };
 
-        onMounted(fetchCards);
-        watch(() => store.selectedGameId, () => { deck.value = []; fetchCards(); });
+        // Debounce search input
+        let searchTimeout;
+        watch([searchQuery, activeFilterQuery, activeSortRules], () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                performSearch(false);
+            }, 300);
+        }, { deep: true });
+
+        watch(() => store.selectedGameId, () => { 
+            deck.value = []; 
+            performSearch(false); 
+        });
+
+        // Infinite Scroll Observer
+        let observer = null;
+        const scrollTrigger = ref(null);
+        
+        onMounted(() => {
+            performSearch(false);
+            fetchCollection();
+            
+            observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting && !isLoading.value && !allLoaded.value) {
+                    skip.value += limit;
+                    performSearch(true);
+                }
+            }, { rootMargin: '200px' });
+        });
+        
+        watch(scrollTrigger, (el) => {
+            if (el && observer) {
+                observer.observe(el);
+            }
+        });
+        
+        onUnmounted(() => {
+            if (observer) observer.disconnect();
+        });
 
         // Counts how many rule leaves are active in the ComplexFilter tree
         const activeFilterCount = computed(() => {
@@ -282,66 +401,42 @@ export default {
         const activeSortCount = computed(() => activeSortRules.value.length);
         const showGeneratorModal = ref(false);
 
+        // Save Deck modal state
+        const showSaveDeckModal   = ref(false);
+        const saveDeckName        = ref('');
+        const saveDeckDescription = ref('');
+        const isSavingDeck        = ref(false);
+
+        const saveDeck = async () => {
+            if (!saveDeckName.value.trim()) return;
+            isSavingDeck.value = true;
+            try {
+                const res = await fetch('api/save_deck.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_id:     currentGame.value.id,
+                        name:        saveDeckName.value.trim(),
+                        description: saveDeckDescription.value.trim(),
+                        cards:       deck.value,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                store.addToast('Deck saved successfully!', 'success');
+                showSaveDeckModal.value   = false;
+                saveDeckName.value        = '';
+                saveDeckDescription.value = '';
+            } catch (err) {
+                store.addToast(err.message, 'error');
+            } finally {
+                isSavingDeck.value = false;
+            }
+        };
+
         const onDeckGenerated = (generatedDeck) => {
             deck.value = generatedDeck;
         };
-
-        // Compare two card values for a single sort rule, including raw_data dot-path traversal
-        const compareByRule = (a, b, rule) => {
-            const dir = rule.direction === 'desc' ? -1 : 1;
-
-            let va, vb;
-            if (rule.field === '__raw_path__') {
-                // Traverse raw_data using the dot-path stored on the sort rule
-                va = getValueAtPath(a.raw_data, rule.rawPath);
-                vb = getValueAtPath(b.raw_data, rule.rawPath);
-            } else {
-                va = a[rule.field];
-                vb = b[rule.field];
-            }
-
-            // Special handling: rarity sorts by numeric weight, not alphabetically
-            if (rule.field === 'rarity') {
-                return dir * ((rarityOrder[va] || 0) - (rarityOrder[vb] || 0));
-            }
-            // Numeric values sort numerically
-            if (typeof va === 'number' && typeof vb === 'number') {
-                return dir * (va - vb);
-            }
-            // Array fields: join to a string for comparison
-            const sa = Array.isArray(va) ? va.join(',') : String(va ?? '');
-            const sb = Array.isArray(vb) ? vb.join(',') : String(vb ?? '');
-            return dir * sa.localeCompare(sb);
-        };
-
-        // Master computed: text search → ComplexFilter → cascading multi-sort
-        const filteredCards = computed(() => {
-            let list = cards.value;
-
-            // 1. Text search
-            if (searchQuery.value) {
-                const q = searchQuery.value.toLowerCase();
-                list = list.filter(c => c.name.toLowerCase().includes(q));
-            }
-
-            // 2. ComplexFilter tree evaluation
-            if (activeFilterQuery.value && activeFilterCount.value > 0) {
-                list = list.filter(c => matchesNode(c, activeFilterQuery.value));
-            }
-
-            // 3. Multi-level cascading sort — chain all rules as tiebreakers
-            if (activeSortRules.value.length > 0) {
-                list = [...list].sort((a, b) => {
-                    for (const rule of activeSortRules.value) {
-                        const result = compareByRule(a, b, rule);
-                        if (result !== 0) return result; // Only move to next tiebreaker if tied
-                    }
-                    return 0;
-                });
-            }
-
-            return list;
-        });
 
         const onQueryUpdated = (query) => { activeFilterQuery.value = query; };
         const resetFilter = () => { activeFilterQuery.value = null; };
@@ -353,7 +448,6 @@ export default {
         const addToDeck = (card) => {
             if (!currentGame.value) return;
 
-            // 1. Basic Deck Limit checks
             if (deck.value.length >= maxDeckSize.value) {
                 store.addToast(`Deck is full (${maxDeckSize.value} cards max).`, 'warning');
                 return;
@@ -366,7 +460,6 @@ export default {
                 return;
             }
 
-            // 2. Dynamic Rules check (from game schema)
             const deckRules = currentGame.value.deck_rules || [];
             for (const rule of deckRules) {
                 if (rule.type === 'unique_property') {
@@ -417,13 +510,15 @@ export default {
 
         return {
             store, currentGame, maxDeckSize, isSmallDeck,
-            cards, isLoading, searchQuery, filteredCards,
-            showSortTray, showFilterTray, showOwnedOnly, filterSchema,
+            renderedCards, totalCards, allLoaded, isLoading, searchQuery,
+            showSortTray, showFilterTray, filterSchema,
             activeFilterCount, activeSortCount, onQueryUpdated, resetFilter, onSortUpdated,
+            collectionOnly, toggleCollectionOnly,
             deck, isInDeck, addToDeck, removeFromDeck, removeOneFromDeck, clearDeck,
-            groupedDeck,
+            groupedDeck, scrollTrigger,
             showGeneratorModal,
-            onDeckGenerated
+            onDeckGenerated,
+            showSaveDeckModal, saveDeckName, saveDeckDescription, isSavingDeck, saveDeck,
         };
     }
 }

@@ -22,10 +22,10 @@ export default {
                         <span v-else>></span>
                     </div>
                     <div class="game-options" v-if="store.selectedGameId === game.id">
-                        <div>Deck Builder</div>
-                        <div>Game Rules Editor</div>
-                        <div>Browse User Decks</div>
-                        <div>Manage Collection</div>
+                        <div @click="store.currentView = 'deck-builder'">Deck Builder</div>
+                        <div v-if="store.isAdminOfGame(game.id)" @click="store.currentView = 'admin'" style="color: var(--primary-color);">Admin Dashboard</div>
+                        <div @click="store.currentView = 'browse-decks'">Browse User Decks</div>
+                        <div @click="store.currentView = 'manage-collection'">Manage Collection</div>
                     </div>
                 </div>
                 <div class="game-item" v-if="filteredGames.length === 0 && isSidebarOpen" style="justify-content: center; opacity: 0.7; cursor: default;">

@@ -15,8 +15,13 @@
   - `[ ]` UI QA & Testing: Thoroughly test all UI flows, responsive layouts, and edge cases.
 
 - `[ ]` **Phase 4: Data Pipelines & Assets**
-  - `[ ]` Card Art Pipeline: Script to download and map images to local storage and update MongoDB `image_url` fields.
+  - `[ ]` Card Art Moderation Pipeline: Allow logged-in users to upload card images. Save to a temporary directory and insert into an `image_submissions` MongoDB collection.
+  - `[ ]` Admin Moderation Queue: Build an admin UI tab to approve/reject image submissions, updating the card's native `image_url` property upon approval.
   - `[ ]` Semi-Automated Windows Data Upload: Create a drag-and-drop admin UI and `api/sync_database.php` endpoint to consume `umamusu-utils` JSON dumps from your Windows machine.
 
 - `[ ]` **Phase 5: The Deck Generator (LLM-Assisted)**
   - `[ ]` Natural Language Deck Generation: Leverage an LLM API to interpret human-readable restrictions and automatically generate the complex queries/scoring metrics for the generator.
+  - `[ ]` Natural Language Deck Search: Allow users to type plain English queries (e.g. "show me speed decks with SSR cards") and have an LLM translate them into the ComplexFilterNode tree format to query the Browse Decks page.
+
+- `[ ]` **Phase 6: Collection Import Pipelines**
+  - `[ ]` Per-Game Import Adapters: Since there is no unified format between games, each game will need its own import adapter. The admin should be able to register an import format (e.g. a CSV column mapping, or a specific JSON dump shape) for their game, and users can then upload a file that gets parsed and bulk-upserted into their collection.

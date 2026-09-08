@@ -8,14 +8,20 @@ import DeckGeneratorModal from './components/DeckGeneratorModal.js';
 import LandingPage from './pages/LandingPage.js';
 import GameDashboard from './pages/GameDashboard.js';
 import DeckBuilder from './pages/DeckBuilder.js';
+import BrowseDecks from './pages/BrowseDecks.js';
+import ManageCollection from './pages/ManageCollection.js';
+import AdminDashboard from './pages/AdminDashboard.js';
 import UserAuth from './components/UserAuth.js';
 import ToastNotifications from './components/ToastNotifications.js';
 import { store } from './store.js';
 
-const { createApp, ref } = Vue;
+const { createApp, ref, onMounted } = Vue;
 
 const app = createApp({
     setup() {
+        onMounted(() => {
+            store.checkAuth();
+        });
         return { store }
     }
 });
@@ -31,6 +37,9 @@ app.component('deck-generator-modal', DeckGeneratorModal);
 app.component('landing-page', LandingPage);
 app.component('game-dashboard', GameDashboard);
 app.component('deck-builder', DeckBuilder);
+app.component('browse-decks', BrowseDecks);
+app.component('manage-collection', ManageCollection);
+app.component('admin-dashboard', AdminDashboard);
 app.component('user-auth', UserAuth);
 app.component('toast-notifications', ToastNotifications);
 

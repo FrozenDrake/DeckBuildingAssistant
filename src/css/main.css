@@ -588,7 +588,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    padding-bottom: 20px;
+    padding: 0 20px 20px;
     margin-bottom: 20px;
     border-bottom: 1px solid var(--primary-color);
     /* Never compress: the content panels below absorb any remaining space */
@@ -632,6 +632,8 @@ body {
     min-height: 0;
     /* Guarantee a usable height so panels are never squished by the subheader trays */
     min-height: 525px;
+    /* Match the subheader horizontal padding so panels sit flush with it */
+    padding: 0 20px 20px;
 }
 
 /* Left Panel */
@@ -652,6 +654,9 @@ body {
 }
 
 .db-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 300px;
+
     background: var(--bg-color);
     border: 1px solid var(--primary-color);
     border-radius: 6px;
@@ -858,7 +863,7 @@ body {
     border: 1px solid var(--primary-color);
     border-radius: 8px;
     padding: 16px;
-    margin-top: 4px;
+    margin: 8px 20px 12px;
 }
 
 .filter-tray-footer {
@@ -1095,4 +1100,157 @@ body {
 .toast-anim-leave-to {
     opacity: 0;
     transform: translateX(20px);
+}
+
+/* Generic Modal */
+.user-auth-modal {
+    background: var(--surface-color);
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    width: 90vw;
+}
+
+/* ===== Browse Decks Page ===== */
+
+/* Left-panel deck list items */
+.browse-deck-card {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.08));
+    cursor: pointer;
+    transition: background 0.15s ease;
+    user-select: none;
+}
+
+.browse-deck-card:hover {
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.06);
+}
+
+.browse-deck-card--selected {
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.12);
+    border-left: 3px solid var(--primary-color);
+}
+
+.browse-deck-name {
+    font-weight: 600;
+    font-size: 0.95em;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.browse-deck-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78em;
+    opacity: 0.6;
+    margin-bottom: 2px;
+}
+
+.browse-deck-count {
+    font-size: 0.78em;
+    opacity: 0.5;
+}
+
+.deck-list-panel {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* ===== Generic Modal Overlay ===== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(2px);
+}
+
+.modal-box {
+    background: var(--surface-color);
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    padding: 28px 30px;
+    width: 90vw;
+    max-width: 520px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+    transition: opacity 0.2s ease;
+}
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+    opacity: 0;
+}
+
+/* Subheader right-side controls row used by BrowseDecks and similar pages */
+.subheader-left {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.subheader-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.total-count {
+    font-size: 0.82em;
+    opacity: 0.55;
+}
+
+/* ===== Toggle Switch ===== */
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.9em;
+}
+
+.toggle-switch input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-track {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 999px;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.toggle-switch input:checked + .toggle-track {
+    background: var(--primary-color);
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+}
+
+.toggle-switch input:checked + .toggle-track .toggle-thumb {
+    transform: translateX(16px);
+}
+
+.toggle-label {
+    opacity: 0.85;
 }
