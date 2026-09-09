@@ -57,6 +57,7 @@ export default {
                 ></custom-dropdown>
 
                 <custom-dropdown 
+                    v-show="!(currentFieldType === 'select' || isRawPathString)"
                     v-model="node.operator" 
                     :options="operatorOptions" 
                     placeholder="Operator"
@@ -65,10 +66,10 @@ export default {
                 ></custom-dropdown>
 
                 <div class="rule-value">
-                    <template v-if="currentFieldType === 'select'">
+                    <template v-if="currentFieldType === 'select' || isRawPathString">
                         <custom-dropdown 
                             v-model="node.value" 
-                            :options="currentFieldSelectOptions" 
+                            :options="currentFieldType === 'select' ? currentFieldSelectOptions : rawPathValueOptions" 
                             placeholder="Select Value"
                         ></custom-dropdown>
                     </template>
@@ -113,6 +114,24 @@ export default {
             return opts.map(o => typeof o === 'string' ? { value: o, label: o } : o);
         });
 
+        const rawPathSelectedOption = computed(() => {
+            if (currentFieldType.value === 'raw_path' && props.node.rawPath) {
+                return currentFieldSelectOptions.value.find(o => o.value === props.node.rawPath);
+            }
+            return null;
+        });
+
+        const isRawPathString = computed(() => {
+            return rawPathSelectedOption.value && rawPathSelectedOption.value.valueType === 'string';
+        });
+
+        const rawPathValueOptions = computed(() => {
+            if (isRawPathString.value) {
+                return (rawPathSelectedOption.value.valueOptions || []).map(o => ({ value: o, label: o }));
+            }
+            return [];
+        });
+
         const operatorOptions = computed(() => {
             const type = currentFieldType.value;
             if (!type || !props.schema.operators || !props.schema.operators[type]) return [];
@@ -130,7 +149,11 @@ export default {
             props.node.value = '';
         };
 
-        return { addRule, addGroup, removeChild, fieldOptions, currentFieldType, currentFieldSelectOptions, operatorOptions, onFieldChange }
+        return { 
+            addRule, addGroup, removeChild, 
+            fieldOptions, currentFieldType, currentFieldSelectOptions, operatorOptions, onFieldChange,
+            isRawPathString, rawPathValueOptions 
+        }
     }
 }
 

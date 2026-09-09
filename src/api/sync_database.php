@@ -66,23 +66,44 @@ try {
     }
 
     // Build card documents — all source fields stored verbatim.
-    // Only game_id and name are injected; everything else comes straight from the dump.
-    $nameCandidates = ['name', 'title', 'title_en', 'card_name'];
+    // Only game_id, name, and image_url are injected by the sync.
+    // Fetch existing cards to preserve image_url
+    $existingCards = $m->executeQuery('deckbuilder.cards', new MongoDB\Driver\Query(['game_id' => $gameId]))->toArray();
+    $imageMap = [];
+    foreach ($existingCards as $ec) {
+        // Use either the string name or support_id/id as a stable identifier.
+        // The safest stable identifier is id or support_id.
+        $idKey = $ec->id ?? $ec->support_id ?? $ec->name;
+        if (!empty($ec->image_url)) {
+            $imageMap[$idKey] = $ec->image_url;
+        }
+    }
+
     $docs = [];
     foreach ($rawCards as $raw) {
-        // Strip any stale MongoDB _id fields from the source data
         unset($raw['_id']);
 
-        // Resolve a display name from common field candidates
-        $name = 'Unknown';
-        foreach ($nameCandidates as $key) {
-            if (!empty($raw[$key]) && is_string($raw[$key])) {
-                $name = $raw[$key];
-                break;
+        if (!empty($raw['name_en'])) {
+            $prefix = !empty($raw['title_en']) ? trim($raw['title_en']) . ' ' : '';
+            $name   = $prefix . trim($raw['name_en']);
+        } else {
+            $name = 'Unknown';
+            foreach (['name', 'title', 'card_name'] as $key) {
+                if (!empty($raw[$key]) && is_string($raw[$key])) {
+                    $name = $raw[$key];
+                    break;
+                }
             }
         }
 
-        $docs[] = array_merge(['game_id' => $gameId, 'name' => $name], $raw);
+        // Restore image_url if it existed
+        $idKey = $raw['id'] ?? $raw['support_id'] ?? $name;
+        $imageUrl = $imageMap[$idKey] ?? null;
+
+        $docs[] = array_merge(
+            ['game_id' => $gameId, 'name' => $name, 'image_url' => $imageUrl],
+            $raw
+        );
     }
 
     // Atomic full replace: wipe old cards then insert new batch
@@ -93,7 +114,7 @@ try {
     }
     $m->executeBulkWrite('deckbuilder.cards', $bulk);
 
-    echo json_encode(['success' => true, 'inserted' => count($docs)]);
+    echo json_encode(['success' => true, 'inserted' => count($docs), 'skipped' => 0]);
 
 } catch (Exception $e) {
     http_response_code(500);

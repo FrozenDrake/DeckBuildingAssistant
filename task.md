@@ -1,0 +1,5 @@
+- [ ] Update `docker-compose.yml` to pass `GEMINI_API_KEY`
+- [ ] Create `.env` placeholder
+- [ ] Build `src/api/llm_agent.php` (Tool-calling loop)
+- [ ] Update `src/js/components/DeckGeneratorModal.js` to add AI tab
+- [ ] Verify functionality

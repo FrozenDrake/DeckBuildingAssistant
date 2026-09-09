@@ -32,9 +32,9 @@ try {
         
         if ($node['type'] === 'rule') {
             $path = $node['field'] ?? '';
-            // For raw_path fields, prefix with raw_data.
+            // For dynamic raw paths
             if ($path === '__raw_path__') {
-                $path = 'raw_data.' . ($node['rawPath'] ?? '');
+                $path = $node['rawPath'] ?? '';
             }
 
             $val = $node['value'] ?? '';
@@ -96,7 +96,10 @@ try {
             }
         }
     }
-    if (empty($mongoSort)) $mongoSort = ['_id' => 1];
+    // Always append _id to ensure deterministic sort order for pagination ties
+    if (!isset($mongoSort['_id'])) {
+        $mongoSort['_id'] = 1;
+    }
 
     $m = new MongoDB\Driver\Manager(getenv('MONGO_URI'));
     

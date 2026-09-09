@@ -9,6 +9,7 @@ services:
       - ./src:/var/www/html
     environment:
       - MONGO_URI=mongodb://mongo:27017
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - mongo
 

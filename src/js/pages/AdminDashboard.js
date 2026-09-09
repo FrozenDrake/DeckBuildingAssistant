@@ -19,6 +19,7 @@ export default {
                         <button class="btn" :class="activeTab === 'schema' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'schema'">Edit Card Schema</button>
                         <button class="btn" :class="activeTab === 'cards' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'cards'">Manage Cards</button>
                         <button class="btn" :class="activeTab === 'sync' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'sync'">Sync Database</button>
+                        <button class="btn" :class="activeTab === 'art' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'art'">Art Moderation</button>
                     </div>
 
                     <!-- RULES EDITOR -->
@@ -255,6 +256,27 @@ export default {
                         </div>
                     </div>
 
+                    <!-- ART MODERATION -->
+                    <div v-if="activeTab === 'art'" style="background: var(--surface-color); padding: 20px; border-radius: 8px; border: 1px solid var(--primary-color);">
+                        <h3 style="margin-top: 0;">Art Moderation Queue</h3>
+                        <p style="opacity: 0.8; font-size: 0.95em;">Review card art submitted by users. Approved images will be assigned to the card immediately.</p>
+                        
+                        <div v-if="loadingArt" style="text-align: center; padding: 20px;">Loading submissions...</div>
+                        <div v-else-if="artSubmissions.length === 0" style="text-align: center; padding: 20px; opacity: 0.7;">No pending submissions in the queue.</div>
+                        <div v-else class="mod-queue-grid">
+                            <div v-for="sub in artSubmissions" :key="sub.id" class="mod-item">
+                                <img :src="'images/submissions/' + sub.file_name" alt="Submission" />
+                                <div class="mod-item-details">
+                                    <div><strong>Card:</strong> {{ sub.card_name }}</div>
+                                    <div><strong>Submitted By:</strong> {{ sub.name }}</div>
+                                </div>
+                                <div class="mod-item-actions">
+                                    <button class="btn btn-primary" @click="moderateArt(sub.id, 'approve')" :disabled="moderatingId === sub.id">Approve</button>
+                                    <button class="btn btn-danger" @click="moderateArt(sub.id, 'reject')" :disabled="moderatingId === sub.id">Reject</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                 </div>
             </div>
@@ -594,6 +616,52 @@ export default {
             executeSave(parsedCard);
         };
 
+        // --- ART MODERATION LOGIC ---
+        const artSubmissions = ref([]);
+        const loadingArt = ref(false);
+        const moderatingId = ref(null);
+
+        const fetchArtSubmissions = async () => {
+            if (!selectedGameId.value) return;
+            loadingArt.value = true;
+            try {
+                const res = await fetch(`api/get_art_submissions.php?game_id=${selectedGameId.value}`);
+                const data = await res.json();
+                artSubmissions.value = Array.isArray(data) ? data : [];
+            } catch (err) {
+                console.error(err);
+            } finally {
+                loadingArt.value = false;
+            }
+        };
+
+        const moderateArt = async (submissionId, action) => {
+            moderatingId.value = submissionId;
+            try {
+                const res = await fetch('api/moderate_art.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ submission_id: submissionId, action })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    store.addToast(`Art ${action}d successfully.`, 'success');
+                    artSubmissions.value = artSubmissions.value.filter(s => s.id !== submissionId);
+                } else {
+                    store.addToast(data.error || `Failed to ${action} art.`, 'error');
+                }
+            } catch (err) {
+                store.addToast('Error communicating with server.', 'error');
+            } finally {
+                moderatingId.value = null;
+            }
+        };
+
+        watch(() => activeTab.value, (newTab) => {
+            if (newTab === 'art') fetchArtSubmissions();
+        });
+        // ----------------------------
+
         return {
             store, selectedGameId, selectedGame,
             activeTab, cardMode, rulesJson, schemaJson, saving,
@@ -601,6 +669,7 @@ export default {
             saveRules, saveSchema, saveCard, saveCardFallback, deleteCard: executeDelete, deleteCardFallback: executeDelete, resetCardForm, setCardMode,
             syncFile, syncDragOver, syncing, syncResult, onSyncFileSelect, onSyncDrop, runSync,
             syncAdapter, saveAdapter,
+            artSubmissions, loadingArt, moderatingId, moderateArt
         }
     }
 }

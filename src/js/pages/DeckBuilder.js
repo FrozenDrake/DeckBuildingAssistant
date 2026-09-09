@@ -81,15 +81,31 @@ export default {
                     <div v-else class="card-list" ref="scrollContainer">
                         
                         <div class="db-card" v-for="card in renderedCards" :key="card.id" @click="addToDeck(card)"
-                             :title="'Click to add to deck.\\n\\n' + (card.description || '')"
+                             :title="'Click to add to deck.'"
                              :class="{ 'db-card-in-deck': isInDeck(card) }">
+                             
                             <div class="db-card-header">
                                 <span class="db-card-rarity" :class="card.rarity">{{ card.rarity }}</span>
                                 <span class="db-card-type">{{ card.type }}</span>
                             </div>
                             <div class="db-card-name">{{ card.name }}</div>
-                            <div class="db-card-chars" v-if="card.characters && card.characters.length">
-                                {{ card.characters.join(', ') }}
+                            
+                            <div class="db-card-art-container"
+                                 @dragover.prevent
+                                 @drop.prevent="handleArtDrop($event, card)">
+                                <img v-if="card.image_url" :src="card.image_url" class="db-card-art" />
+                                <button v-if="!card.image_url && store.user" class="db-card-submit-art" @click.stop="promptSubmitArt(card)">
+                                    Submit Art
+                                </button>
+                            </div>
+                            
+                            <!-- Render remaining schema fields that have values (skip name, rarity, type, image_url) -->
+                            <div class="db-card-props" v-if="currentGame && currentGame.card_schema">
+                                <span
+                                    v-for="field in currentGame.card_schema.filter(f => !['name','rarity','type','image_url'].includes(f.key) && card[f.key] != null && card[f.key] !== '')"
+                                    :key="field.key"
+                                    class="db-card-prop"
+                                >{{ field.label }}: {{ card[field.key] }}</span>
                             </div>
                         </div>
                     </div>
@@ -112,10 +128,16 @@ export default {
                     <div class="deck-slots-layout" v-if="isSmallDeck">
                         <div class="deck-slot" v-for="index in maxDeckSize" :key="index" @click="removeFromDeck(index - 1)"
                              :title="deck[index - 1] ? 'Click to remove: ' + deck[index - 1].name : 'Empty slot'">
-                            <div v-if="deck[index - 1]" class="slot-filled">
-                                <div class="slot-rarity" :class="deck[index - 1].rarity">{{ deck[index - 1].rarity }}</div>
-                                <div class="slot-type">{{ deck[index - 1].type }}</div>
-                                <div class="slot-name">{{ deck[index - 1].name }}</div>
+                            <div v-if="deck[index - 1]" class="db-card" style="margin: 0; width: 100%; height: 100%;">
+                                <div class="db-card-header">
+                                    <span class="db-card-rarity" :class="deck[index - 1].rarity">{{ deck[index - 1].rarity }}</span>
+                                    <span class="db-card-type">{{ deck[index - 1].type }}</span>
+                                </div>
+                                <div class="db-card-name">{{ deck[index - 1].name }}</div>
+                                
+                                <div class="db-card-art-container">
+                                    <img v-if="deck[index - 1].image_url" :src="deck[index - 1].image_url" class="db-card-art" />
+                                </div>
                             </div>
                             <div v-else class="slot-empty">+</div>
                         </div>
@@ -130,8 +152,12 @@ export default {
                             <h4>{{ type }} <span class="group-count">({{ group.count }})</span></h4>
                             <div class="deck-list-card" v-for="item in group.cards" :key="item.card.id"
                                  @click="removeOneFromDeck(item.card)" :title="'Click to remove one ' + item.card.name">
-                                <span class="deck-list-name">{{ item.card.name }}</span>
-                                <span class="deck-list-qty">x{{ item.qty }}</span>
+                                <img v-if="item.card.image_url" :src="item.card.image_url" class="deck-list-art" />
+                                <div v-else class="deck-list-art"></div>
+                                <div class="deck-list-info">
+                                    <span class="deck-list-name">{{ item.card.name }}</span>
+                                    <span class="deck-list-qty">x{{ item.qty }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -314,21 +340,46 @@ export default {
                 if (data.cards) {
                     // Extract schema paths dynamically from the first batch
                     if (!isLoadMore) {
-                        const paths = new Set();
+                        // Map of fullPath -> { type: 'string'|'number', values: Set }
+                        const pathMap = new Map();
+                        const ignoreKeys = ['_id', 'id', 'name', 'type', 'rarity', 'image_url', 'obtained'];
                         const extract = (obj, prefix = '') => {
                             if (!obj || typeof obj !== 'object') return;
+                            const isArr = Array.isArray(obj);
                             for (const key in obj) {
-                                const fullPath = prefix ? prefix + '.' + key : key;
-                                if (typeof obj[key] === 'number' || typeof obj[key] === 'string') {
-                                    paths.add(fullPath);
+                                if (!prefix && ignoreKeys.includes(key)) continue;
+                                let fullPath = prefix;
+                                if (!isArr) {
+                                    fullPath = prefix ? prefix + '.' + key : key;
                                 }
-                                extract(obj[key], fullPath);
+                                
+                                const val = obj[key];
+                                const t = typeof val;
+                                if (t === 'number' || t === 'string' || t === 'boolean') {
+                                    if (!pathMap.has(fullPath)) {
+                                        pathMap.set(fullPath, { type: t, values: new Set() });
+                                    }
+                                    if (t === 'string') {
+                                        pathMap.get(fullPath).values.add(val);
+                                    }
+                                }
+                                extract(val, fullPath);
                             }
                         };
                         data.cards.forEach(card => {
-                            if (card.raw_data) extract(card.raw_data);
+                            extract(card);
                         });
-                        rawPathOptions.value = Array.from(paths).sort().map(p => ({ label: p, value: p }));
+                        
+                        rawPathOptions.value = Array.from(pathMap.entries())
+                            .sort((a, b) => a[0].localeCompare(b[0]))
+                            .map(([p, info]) => {
+                                return {
+                                    label: p,
+                                    value: p,
+                                    valueType: info.type,
+                                    valueOptions: info.type === 'string' ? Array.from(info.values).sort() : []
+                                };
+                            });
                     }
 
                     totalCards.value = data.total;
@@ -480,6 +531,48 @@ export default {
             deck.value.push(card);
         };
 
+        const uploadArt = async (file, card) => {
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('card_id', card._id?.$oid || card.id);
+            formData.append('game_id', currentGame.value.id);
+            
+            try {
+                const res = await fetch('api/submit_art.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    store.addToast('Art submitted for moderation!', 'success');
+                } else {
+                    store.addToast(data.error || 'Failed to submit art.', 'error');
+                }
+            } catch (err) {
+                store.addToast('Error submitting art.', 'error');
+            }
+        };
+
+        const promptSubmitArt = (card) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/jpeg, image/png, image/webp';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) uploadArt(file, card);
+            };
+            input.click();
+        };
+
+        const handleArtDrop = (e, card) => {
+            const file = e.dataTransfer.files[0];
+            if (file && ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+                uploadArt(file, card);
+            } else if (file) {
+                store.addToast('Only JPG, PNG, and WebP images are allowed.', 'error');
+            }
+        };
+
         const removeFromDeck = (index) => {
             if (deck.value[index]) deck.value.splice(index, 1);
         };
@@ -515,6 +608,7 @@ export default {
             activeFilterCount, activeSortCount, onQueryUpdated, resetFilter, onSortUpdated,
             collectionOnly, toggleCollectionOnly,
             deck, isInDeck, addToDeck, removeFromDeck, removeOneFromDeck, clearDeck,
+            promptSubmitArt, handleArtDrop,
             groupedDeck, scrollTrigger,
             showGeneratorModal,
             onDeckGenerated,

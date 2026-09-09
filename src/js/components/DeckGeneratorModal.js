@@ -12,7 +12,13 @@ export default {
         <div class="modal-backdrop" v-if="show" @click.self="$emit('close')">
             <div class="modal-content generator-modal">
                 <h2>Deck Generator</h2>
-                <div class="generator-scroll">
+                
+                <div class="generator-tabs" style="display: flex; gap: 10px; padding: 0 20px; margin-bottom: 15px; border-bottom: 1px solid var(--primary-color);">
+                    <button class="btn" :class="activeTab === 'manual' ? 'btn-primary' : 'btn-outline'" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -1px;" @click="activeTab = 'manual'">Algorithmic (Fast)</button>
+                    <button class="btn" :class="activeTab === 'ai' ? 'btn-primary' : 'btn-outline'" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -1px;" @click="activeTab = 'ai'">AI Agent (Smart)</button>
+                </div>
+
+                <div class="generator-scroll" v-if="activeTab === 'manual'">
                     <!-- GLOBAL CONSTRAINTS -->
                     <div class="generator-section">
                         <h3>Global Card Constraints</h3>
@@ -36,7 +42,6 @@ export default {
                                 <label>Points to award if matched:</label>
                                 <input type="number" v-model.number="rule.weight" class="filter-input" style="width: 80px;" />
                             </div>
-                            <!-- Re-use the ComplexFilterNode component for nested bindings -->
                             <complex-filter-node :node="rule.filters" :schema="schema"></complex-filter-node>
                         </div>
                         <button class="btn btn-outline" @click="addScoringRule">+ Add Scoring Priority</button>
@@ -62,13 +67,35 @@ export default {
                     </div>
                 </div>
 
+                <div class="generator-scroll" v-if="activeTab === 'ai'" style="display: flex; flex-direction: column;">
+                    <div class="generator-section" style="flex: 1; display: flex; flex-direction: column;">
+                        <h3>Describe your desired deck</h3>
+                        <p class="help-text">The AI agent will intelligently query the database and strategically pick a fully synergistic deck for you.</p>
+                        <textarea v-model="aiPrompt" class="filter-input" style="flex: 1; min-height: 200px; padding: 15px; resize: none; margin-bottom: 15px;" placeholder="e.g. Build an aggro deck focused on low cost and speed..."></textarea>
+                        
+                        <div v-if="isGeneratingAI" class="ai-status-box" style="background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px;">
+                            <h4 style="margin-top: 0;">Agent Status</h4>
+                            <ul style="margin: 0; padding-left: 20px; font-size: 0.9em; opacity: 0.8;">
+                                <li v-for="log in aiLogs">{{ log }}</li>
+                                <li><em>Thinking... (Evaluating synergies)</em></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- API Errors / Warnings -->
-                <div v-if="apiError" class="api-error">{{ apiError }}</div>
+                <div v-if="apiError" class="api-error" style="padding: 0 20px; color: #ff4444; font-weight: bold;">{{ apiError }}</div>
                 
-                <div class="modal-footer">
+                <div class="modal-footer" v-if="activeTab === 'manual'">
                     <button class="btn btn-outline" @click="$emit('close')">Cancel</button>
                     <button class="btn btn-primary" :disabled="isGenerating || totalSlotCards > maxDeckSize" @click="generateDeck">
                         {{ isGenerating ? 'Generating...' : 'Generate Deck' }}
+                    </button>
+                </div>
+                <div class="modal-footer" v-if="activeTab === 'ai'">
+                    <button class="btn btn-outline" @click="$emit('close')" :disabled="isGeneratingAI">Cancel</button>
+                    <button class="btn btn-primary" :disabled="isGeneratingAI || !aiPrompt.trim()" @click="generateAIDeck">
+                        {{ isGeneratingAI ? 'Running Agent...' : 'Generate AI Deck' }}
                     </button>
                 </div>
             </div>
@@ -139,12 +166,60 @@ export default {
             }
         };
 
+        const activeTab = ref('ai');
+        const aiPrompt = ref('');
+        const aiLogs = ref([]);
+        const isGeneratingAI = ref(false);
+
+        const generateAIDeck = async () => {
+            if (!aiPrompt.value.trim()) return;
+            
+            isGeneratingAI.value = true;
+            apiError.value = '';
+            aiLogs.value = [];
+
+            try {
+                const response = await fetch('api/llm_agent.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_id: props.game.id,
+                        prompt: aiPrompt.value.trim()
+                    })
+                });
+                
+                const resData = await response.json();
+                
+                if (!response.ok || !resData.success) {
+                    throw new Error(resData.error || 'Unknown AI error');
+                }
+
+                if (resData.logs) {
+                    aiLogs.value = resData.logs;
+                }
+                
+                if (resData.data && resData.data.deck) {
+                    store.addToast("AI Explanation:\n" + resData.data.explanation, 'info', 0);
+                    emit('generated', resData.data.deck);
+                    emit('close');
+                } else {
+                    throw new Error('AI failed to return a valid deck.');
+                }
+            } catch (err) {
+                console.error(err);
+                apiError.value = err.message;
+            } finally {
+                isGeneratingAI.value = false;
+            }
+        };
+
         return {
             maxDeckSize,
             globalFilters, slots, scoringRules,
             totalSlotCards, isGenerating, apiError,
             addSlot, removeSlot, addScoringRule, removeScoringRule,
-            generateDeck
+            generateDeck,
+            activeTab, aiPrompt, aiLogs, isGeneratingAI, generateAIDeck
         };
     }
 }
