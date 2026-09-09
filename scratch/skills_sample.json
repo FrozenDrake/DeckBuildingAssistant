@@ -1,0 +1,117 @@
+{
+  "activation": 0,
+  "char": [
+    100302
+  ],
+  "condition_groups": [
+    {
+      "base_time": 50000,
+      "condition": "is_last_straight==1",
+      "effects": [
+        {
+          "type": 27,
+          "value": 4500
+        }
+      ],
+      "precondition": "is_finalcorner==1&is_overtake==1&order<=5&order_rate<=50&overtake_target_no_order_up_time>=2"
+    }
+  ],
+  "desc_en": "Greatly increase velocity with an indomitable fighting spirit on the final straight after being on the heels of another runner toward the front on the final corner or later.",
+  "desc_ko": "최종 코너 이후에 전방에 따라붙으면 최종 직선을 달리는 중에 불굴의 투지로 속도가 많이 상승한다",
+  "desc_tw": "在最後彎道之後若位於隊列前方緊追不捨，跑在最後直線時會以不屈服的鬥志使速度大幅上升",
+  "endesc": "If you're chasing after another girl in the front during the Final Corner or beyond, your speed on the Final Straight will increase",
+  "enname": "It's Going to Be Me",
+  "gene_version": {
+    "activation": 1,
+    "condition_groups": [
+      {
+        "base_time": 30000,
+        "condition": "is_last_straight==1",
+        "effects": [
+          {
+            "type": 27,
+            "value": 2500
+          }
+        ],
+        "precondition": "is_finalcorner==1&is_overtake==1&order<=5&order_rate<=50&overtake_target_no_order_up_time>=2"
+      }
+    ],
+    "cost": 200,
+    "desc_en": "Moderately increase velocity on the final straight after being on the heels of another runner toward the front on the final corner or later.",
+    "desc_ko": "최종 코너 이후에 전방에 따라붙으면 최종 직선을 달리는 중에 속도가 다소 상승한다",
+    "desc_tw": "在最後彎道之後若位於隊列前方緊追不捨跑在最後直線時會使速度稍微上升",
+    "iconid": 20011,
+    "id": 910031,
+    "inherited": true,
+    "name_en": "Certain Victory",
+    "name_ko": "절대는, 나야",
+    "name_tw": "絕對是我",
+    "parent_skills": [
+      110031
+    ],
+    "rarity": 1,
+    "tid": "1"
+  },
+  "iconid": 20013,
+  "id": 110031,
+  "jpdesc": "最終コーナー以降に前方で追いすがっていると最終直線にいるとき不屈の闘志で速度がすごく上がる",
+  "jpname": "絶対は、ボクだ",
+  "loc": {
+    "en": {
+      "char": [
+        100302
+      ],
+      "condition_groups": [
+        {
+          "base_time": 50000,
+          "condition": "is_finalcorner==1&corner==0",
+          "effects": [
+            {
+              "type": 27,
+              "value": 4500
+            }
+          ],
+          "precondition": "is_finalcorner==1&is_overtake==1&order<=5&order_rate<=50&overtake_target_no_order_up_time>=2"
+        }
+      ],
+      "gene_version": {
+        "condition_groups": [
+          {
+            "base_time": 30000,
+            "condition": "is_finalcorner==1&corner==0",
+            "effects": [
+              {
+                "type": 27,
+                "value": 2500
+              }
+            ],
+            "precondition": "is_finalcorner==1&is_overtake==1&order<=5&order_rate<=50&overtake_target_no_order_up_time>=2"
+          }
+        ]
+      },
+      "type": [
+        "f_s",
+        "str",
+        "nac"
+      ]
+    },
+    "ko": {
+      "char": [
+        100302
+      ]
+    },
+    "zh_tw": {
+      "char": [
+        100302
+      ]
+    }
+  },
+  "name_en": "Certain Victory",
+  "name_ko": "절대는, 나야",
+  "name_tw": "絕對是我",
+  "rarity": 5,
+  "tid": "0",
+  "type": [
+    "nac"
+  ]
+}
