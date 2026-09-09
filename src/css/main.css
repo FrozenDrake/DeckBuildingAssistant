@@ -1254,3 +1254,25 @@ body {
 .toggle-label {
     opacity: 0.85;
 }
+
+/* ===== Sync Database Drop Zone ===== */
+.sync-drop-zone {
+    border: 2px dashed var(--primary-color);
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+}
+
+.sync-drop-zone:hover,
+.sync-drop-zone--over {
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.06);
+    border-color: var(--primary-color);
+}
+
+.sync-drop-zone--loaded {
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.04);
+    border-style: solid;
+}

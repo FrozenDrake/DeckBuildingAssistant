@@ -17,6 +17,9 @@ if (array_key_exists('deck_rules', $input)) {
 if (array_key_exists('card_schema', $input)) {
     $updateFields['card_schema'] = $input['card_schema'];
 }
+if (array_key_exists('import_adapter', $input)) {
+    $updateFields['import_adapter'] = $input['import_adapter'];
+}
 
 if (!$gameId || empty($updateFields)) {
     http_response_code(400);

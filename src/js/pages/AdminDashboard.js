@@ -18,6 +18,7 @@ export default {
                         <button class="btn" :class="activeTab === 'rules' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'rules'">Edit Game Rules</button>
                         <button class="btn" :class="activeTab === 'schema' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'schema'">Edit Card Schema</button>
                         <button class="btn" :class="activeTab === 'cards' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'cards'">Manage Cards</button>
+                        <button class="btn" :class="activeTab === 'sync' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'sync'">Sync Database</button>
                     </div>
 
                     <!-- RULES EDITOR -->
@@ -182,6 +183,78 @@ export default {
                     </div>
                     </div>
 
+                    <!-- SYNC DATABASE TAB -->
+                    <div v-if="activeTab === 'sync'" style="background: var(--surface-color); padding: 20px; border-radius: 8px; border: 1px solid var(--primary-color);">
+                        <h3 style="margin-top: 0; margin-bottom: 6px;">Sync Card Database</h3>
+                        <p class="help-text" style="margin-bottom: 12px;">
+                            Upload a JSON array dump from your data source. All fields from each record are stored verbatim on the card document — no mapping or transformation is applied.
+                        </p>
+                        <p class="help-text" style="margin-bottom: 20px;">
+                            Upload a JSON dump from your data source (e.g. umamusu-utils). This will perform a <strong>full replace</strong> — all existing cards for this game will be wiped and replaced with the uploaded data.
+                            Use the <strong>Edit Card Schema</strong> tab to define which field keys from your dump should be surfaced in the UI (as filters, sort options, and card form fields). The field keys in your schema must match the field keys in your dump exactly.
+                            This is a <strong>full replace</strong> — all existing cards for this game will be wiped and replaced with the uploaded data.
+                        </p>
+
+                        <!-- Import Adapter Selector -->
+                        <div style="margin-bottom: 20px; padding: 14px 16px; border-radius: 6px; background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.08);">
+                            <label style="display:block; font-weight: bold; margin-bottom: 8px;">Import Adapter</label>
+                            <p class="help-text" style="margin-bottom: 10px;">Controls how raw records in the JSON dump are transformed into card documents. Changes are saved to the game when you click Save.</p>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <custom-dropdown
+                                    v-model="syncAdapter"
+                                    :options="[
+                                        { value: 'generic',    label: 'Generic (store all fields as-is)' },
+                                        { value: 'umamusume',  label: 'Umamusume / GameTora (rarity map, title + char_name)' },
+                                    ]"
+                                    placeholder="Select adapter..."
+                                    style="min-width: 320px;"
+                                ></custom-dropdown>
+                                <button class="btn btn-outline btn-sm" :disabled="saving || syncAdapter === (selectedGame?.import_adapter || 'generic')" @click="saveAdapter">
+                                    {{ saving ? 'Saving...' : 'Save' }}
+                                </button>
+                                <span v-if="selectedGame?.import_adapter" style="font-size: 0.82em; opacity: 0.55;">
+                                    Currently saved: <strong>{{ selectedGame.import_adapter }}</strong>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Drop Zone -->
+                        <div
+                            class="sync-drop-zone"
+                            :class="{ 'sync-drop-zone--over': syncDragOver, 'sync-drop-zone--loaded': syncFile }"
+                            @dragover.prevent="syncDragOver = true"
+                            @dragleave.prevent="syncDragOver = false"
+                            @drop.prevent="onSyncDrop"
+                            @click="$refs.syncFileInput.click()"
+                        >
+                            <input ref="syncFileInput" type="file" accept=".json,application/json" style="display:none;" @change="onSyncFileSelect" />
+                            <div v-if="!syncFile">
+                                <p style="margin: 0 0 6px; font-size: 1.05em; font-weight: 600;">Drag and drop your JSON dump here</p>
+                                <p style="margin: 0; opacity: 0.55; font-size: 0.88em;">or click to browse — accepts .json files only</p>
+                            </div>
+                            <div v-else>
+                                <p style="margin: 0 0 4px; font-size: 1em; font-weight: 600;">{{ syncFile.name }}</p>
+                                <p style="margin: 0; opacity: 0.55; font-size: 0.85em;">{{ (syncFile.size / 1024).toFixed(1) }} KB — click to change file</p>
+                            </div>
+                        </div>
+
+                        <!-- Result / Progress -->
+                        <div v-if="syncResult" style="margin-top: 15px; padding: 12px 16px; border-radius: 6px;" :style="syncResult.error ? 'background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);' : 'background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3);'">
+                            <p v-if="syncResult.error" style="margin: 0; color: #ef4444;">{{ syncResult.error }}</p>
+                            <p v-else style="margin: 0;">
+                                Sync complete — <strong>{{ syncResult.inserted }}</strong> cards inserted,
+                                <strong>{{ syncResult.skipped }}</strong> skipped.
+                            </p>
+                        </div>
+
+                        <div style="margin-top: 16px; display: flex; gap: 10px; align-items: center;">
+                            <button class="btn btn-primary" :disabled="!syncFile || syncing" @click="runSync">
+                                {{ syncing ? 'Uploading...' : 'Run Sync' }}
+                            </button>
+                            <button class="btn btn-outline" v-if="syncFile" :disabled="syncing" @click="syncFile = null; syncResult = null;">Clear</button>
+                        </div>
+                    </div>
+
 
                 </div>
             </div>
@@ -193,7 +266,71 @@ export default {
     setup() {
         const selectedGameId = computed(() => store.selectedGameId);
         const activeTab = ref('rules');
-        const cardMode = ref('create');
+        const cardMode  = ref('create');
+
+        // ---- Sync Database tab ----
+        const syncFile     = ref(null);
+        const syncDragOver = ref(false);
+        const syncing      = ref(false);
+        const syncResult   = ref(null);
+        const syncAdapter  = ref('generic');
+
+
+        const saveAdapter = async () => {
+            if (!selectedGameId.value) return;
+            saving.value = true;
+            try {
+                const res  = await fetch('api/admin_update_game.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: selectedGameId.value, import_adapter: syncAdapter.value }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                if (selectedGame.value) selectedGame.value.import_adapter = syncAdapter.value;
+                store.addToast('Import adapter saved.', 'success');
+            } catch (err) {
+                store.addToast(err.message, 'error');
+            } finally {
+                saving.value = false;
+            }
+        };
+
+        const onSyncFileSelect = (e) => {
+            const file = e.target.files[0];
+            if (file) { syncFile.value = file; syncResult.value = null; }
+        };
+        const onSyncDrop = (e) => {
+            syncDragOver.value = false;
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/json' || (file && file.name.endsWith('.json'))) {
+                syncFile.value = file;
+                syncResult.value = null;
+            }
+        };
+        const runSync = async () => {
+            if (!syncFile.value || syncing.value) return;
+            syncing.value = true;
+            syncResult.value = null;
+            try {
+                const form = new FormData();
+                form.append('game_id', selectedGameId.value);
+                form.append('dump', syncFile.value);
+                const res  = await fetch('api/sync_database.php', { method: 'POST', body: form });
+                const data = await res.json();
+                syncResult.value = data;
+                if (res.ok) {
+                    store.addToast(`Sync complete — ${data.inserted} cards imported.`, 'success');
+                } else {
+                    store.addToast(data.error || 'Sync failed.', 'error');
+                }
+            } catch (err) {
+                syncResult.value = { error: err.message };
+                store.addToast(err.message, 'error');
+            } finally {
+                syncing.value = false;
+            }
+        };
 
         const rulesJson = ref('[]');
         const schemaJson = ref('[]');
@@ -212,6 +349,11 @@ export default {
             if (!selectedGameId.value) return null;
             return store.games.find(g => g.id === selectedGameId.value) || null;
         });
+
+        // Keep syncAdapter in sync with the loaded game document
+        watch(selectedGame, (game) => {
+            if (game) syncAdapter.value = game.import_adapter || 'generic';
+        }, { immediate: true });
 
         const currentSchema = computed(() => selectedGame.value?.card_schema || []);
         const hasSchema = computed(() => currentSchema.value.length > 0);
@@ -456,7 +598,9 @@ export default {
             store, selectedGameId, selectedGame,
             activeTab, cardMode, rulesJson, schemaJson, saving,
             hasSchema, currentSchema, cards, cardSearchQuery, selectedCardId, cardOptions, cardForm, cardFormRawJson, cardJsonFallback,
-            saveRules, saveSchema, saveCard, saveCardFallback, deleteCard: executeDelete, deleteCardFallback: executeDelete, resetCardForm, setCardMode
+            saveRules, saveSchema, saveCard, saveCardFallback, deleteCard: executeDelete, deleteCardFallback: executeDelete, resetCardForm, setCardMode,
+            syncFile, syncDragOver, syncing, syncResult, onSyncFileSelect, onSyncDrop, runSync,
+            syncAdapter, saveAdapter,
         }
     }
 }
