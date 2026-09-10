@@ -8,17 +8,15 @@ export const store = reactive({
     user: null, // Holds the authenticated user data
 
     async fetchGames() {
-        if (this.games.length === 0 && !this.isLoadingGames) {
-            this.isLoadingGames = true;
-            try {
-                const response = await fetch('api/get_games.php');
-                const data = await response.json();
-                this.games = data;
-            } catch (err) {
-                console.error("Failed to fetch games:", err);
-            } finally {
-                this.isLoadingGames = false;
-            }
+        this.isLoadingGames = true;
+        try {
+            const res = await fetch('api/get_games.php?t=' + new Date().getTime());
+            const data = await res.json();
+            this.games = data;
+        } catch (err) {
+            console.error(err);
+        } finally {
+            this.isLoadingGames = false;
         }
     },
 

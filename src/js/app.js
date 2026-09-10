@@ -11,6 +11,7 @@ import DeckBuilder from './pages/DeckBuilder.js';
 import BrowseDecks from './pages/BrowseDecks.js';
 import ManageCollection from './pages/ManageCollection.js';
 import AdminDashboard from './pages/AdminDashboard.js';
+import CreateGame from './pages/CreateGame.js';
 import UserAuth from './components/UserAuth.js';
 import ToastNotifications from './components/ToastNotifications.js';
 import { store } from './store.js';
@@ -40,6 +41,7 @@ app.component('deck-builder', DeckBuilder);
 app.component('browse-decks', BrowseDecks);
 app.component('manage-collection', ManageCollection);
 app.component('admin-dashboard', AdminDashboard);
+app.component('create-game', CreateGame);
 app.component('user-auth', UserAuth);
 app.component('toast-notifications', ToastNotifications);
 

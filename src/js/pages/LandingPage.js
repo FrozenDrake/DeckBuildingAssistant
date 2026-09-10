@@ -18,7 +18,7 @@ export default {
                     </div>
                 </div>
                 
-                <div class="game-card add-game" v-if="!store.isLoadingGames">
+                <div class="game-card add-game" v-if="!store.isLoadingGames" @click="store.currentView = 'create-game'">
                     <div class="game-cover" style="background: transparent; border-bottom: 0; display: flex; align-items: center; justify-content: center; color: var(--primary-color); font-size: 3em;">
                         +
                     </div>

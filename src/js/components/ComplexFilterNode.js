@@ -66,7 +66,7 @@ export default {
                 ></custom-dropdown>
 
                 <div class="rule-value">
-                    <template v-if="currentFieldType === 'select' || isRawPathString">
+                    <template v-if="(currentFieldType === 'select' || isRawPathString) && !['contains', 'does not contain'].includes(node.operator)">
                         <custom-dropdown 
                             v-model="node.value" 
                             :options="currentFieldType === 'select' ? currentFieldSelectOptions : rawPathValueOptions" 

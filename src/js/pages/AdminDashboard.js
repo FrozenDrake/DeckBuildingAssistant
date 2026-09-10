@@ -20,6 +20,7 @@ export default {
                         <button class="btn" :class="activeTab === 'cards' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'cards'">Manage Cards</button>
                         <button class="btn" :class="activeTab === 'sync' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'sync'">Sync Database</button>
                         <button class="btn" :class="activeTab === 'art' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'art'">Art Moderation</button>
+                        <button class="btn" :class="activeTab === 'settings' ? 'btn-primary' : 'btn-outline'" @click="activeTab = 'settings'">Game Settings</button>
                     </div>
 
                     <!-- RULES EDITOR -->
@@ -31,6 +32,9 @@ export default {
                             <ul style="margin-left: 20px; margin-top: 10px;">
                                 <li><code>unique_property</code>: Prevents a deck from containing multiple cards with the same value in a specific field.
                                     <br/><em>Example:</em> <code>{ "type": "unique_property", "property": "characters", "is_array": true, "error_message": "..." }</code>
+                                </li>
+                                <li style="margin-top: 10px;"><code>aggregate_attribute</code>: Validates the sum or average of a numeric card attribute across the whole deck.
+                                    <br/><em>Example:</em> <code>{ "type": "aggregate_attribute", "property": "cost", "operator": "sum", "condition": "<=", "value": 50, "error_message": "..." }</code>
                                 </li>
                             </ul>
                         </div>
@@ -256,6 +260,84 @@ export default {
                         </div>
                     </div>
 
+                    <!-- GAME SETTINGS -->
+                    <div v-if="activeTab === 'settings'" style="background: var(--surface-color); padding: 20px; border-radius: 8px; border: 1px solid var(--primary-color);">
+                        <h3 style="margin-top: 0;">General Settings</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Game Name</label>
+                                <input type="text" v-model="generalSettings.name" class="filter-input" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Cover Color</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="color" v-model="generalSettings.cover_color" style="width: 50px; height: 38px; padding: 0; border: none; cursor: pointer;" />
+                                    <input type="text" v-model="generalSettings.cover_color" class="filter-input" style="flex: 1;" placeholder="#HEX" />
+                                </div>
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Description</label>
+                                <textarea v-model="generalSettings.description" class="filter-input" style="width: 100%; height: 80px;"></textarea>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Max Deck Size</label>
+                                <input type="number" v-model.number="generalSettings.max_deck_size" class="filter-input" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Max Copies Per Card</label>
+                                <input type="number" v-model.number="generalSettings.max_copies_per_card" class="filter-input" style="width: 100%; margin-bottom: 5px;" />
+                                <div style="font-size: 0.8em; opacity: 0.7; line-height: 1.3;">Default limit. Add a <code>max_copies</code> number field to your Card Schema to override this per-card (e.g. for Basic Lands).</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" @click="saveGeneralSettings" :disabled="savingGeneralSettings">Save General Settings</button>
+                        
+                        <hr style="border: 0; border-top: 1px solid rgba(0,0,0,0.1); margin: 30px 0;" />
+                        
+                        <h3 style="margin-top: 0;">Visibility</h3>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" v-model="isPublic" style="margin-right: 10px; transform: scale(1.2);" />
+                                <div>
+                                    <strong style="display: block;">Public Game</strong>
+                                    <span style="font-size: 0.85em; opacity: 0.7;">If checked, anyone can see this game and its cards. If unchecked, only admins can see it.</span>
+                                </div>
+                            </label>
+                        </div>
+                        <button class="btn btn-primary btn-sm" @click="saveVisibility" :disabled="savingVisibility">Save Visibility</button>
+                        
+                        <hr style="border: 0; border-top: 1px solid rgba(0,0,0,0.1); margin: 30px 0;" />
+                        
+                        <div v-if="isCreator">
+                            <h3 style="margin-top: 0;">Multi-Admin Management</h3>
+                            <p style="font-size: 0.9em; opacity: 0.8; margin-bottom: 15px;">Grant other users admin access to this game.</p>
+                            
+                            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                                <input type="text" v-model="newAdminUsername" class="filter-input" placeholder="Username to grant..." style="flex: 1;" />
+                                <button class="btn btn-primary" @click="grantAdmin" :disabled="grantingAdmin">Grant Admin</button>
+                            </div>
+                            
+                            <div>
+                                <strong style="display: block; margin-bottom: 10px;">Current Admins:</strong>
+                                <div v-if="loadingAdmins" style="opacity: 0.6; font-size: 0.9em;">Loading admins...</div>
+                                <ul v-else style="margin: 0; padding-left: 20px;">
+                                    <li v-for="admin in currentAdmins" :key="admin" style="margin-bottom: 8px;">
+                                        {{ admin }}
+                                        <button v-if="admin !== store.user?.username" class="btn btn-outline btn-sm" style="margin-left: 10px; padding: 2px 8px; font-size: 0.75em;" @click="revokeAdmin(admin)">Revoke</button>
+                                    </li>
+                                </ul>
+                            </div>
+                            
+                            <hr style="border: 0; border-top: 1px solid rgba(0,0,0,0.1); margin: 30px 0;" />
+                            
+                            <div style="background: rgba(255, 0, 0, 0.05); padding: 15px; border-radius: 8px; border: 1px dashed red;">
+                                <h3 style="margin-top: 0; color: red;">Danger Zone</h3>
+                                <p style="font-size: 0.9em; opacity: 0.8; margin-bottom: 15px;">Permanently delete this game and all associated data.</p>
+                                <button class="btn btn-primary" style="background: red; border-color: red;" @click="deleteGame">Delete Game</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- ART MODERATION -->
                     <div v-if="activeTab === 'art'" style="background: var(--surface-color); padding: 20px; border-radius: 8px; border: 1px solid var(--primary-color);">
                         <h3 style="margin-top: 0;">Art Moderation Queue</h3>
@@ -280,6 +362,47 @@ export default {
 
                 </div>
             </div>
+
+            <!-- Custom Modals -->
+            <!-- Delete Card Modal -->
+            <div v-if="cardToDelete" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                <div style="background: var(--bg-color); padding: 25px; border-radius: 8px; border: 1px solid var(--border-color); width: 400px; max-width: 90vw;">
+                    <h3 style="margin-top: 0;">Confirm Deletion</h3>
+                    <p>Are you sure you want to delete this card?</p>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button class="btn btn-outline" style="flex: 1;" @click="cardToDelete = null">Cancel</button>
+                        <button class="btn btn-primary" style="flex: 1; background: red; border-color: red;" @click="executeDeleteConfirmed">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revoke Admin Modal -->
+            <div v-if="adminToRevoke" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                <div style="background: var(--bg-color); padding: 25px; border-radius: 8px; border: 1px solid var(--border-color); width: 400px; max-width: 90vw;">
+                    <h3 style="margin-top: 0;">Revoke Admin Rights</h3>
+                    <p>Are you sure you want to revoke admin rights for <strong>{{ adminToRevoke }}</strong>?</p>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button class="btn btn-outline" style="flex: 1;" @click="adminToRevoke = null">Cancel</button>
+                        <button class="btn btn-primary" style="flex: 1; background: red; border-color: red;" @click="executeRevokeConfirmed">Revoke</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Game Modal -->
+            <div v-if="showDeleteGameModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                <div style="background: var(--bg-color); padding: 25px; border-radius: 8px; border: 1px solid red; width: 450px; max-width: 90vw; box-shadow: 0 10px 30px rgba(255,0,0,0.2);">
+                    <h3 style="margin-top: 0; color: red;">Delete Game</h3>
+                    <p><strong>WARNING:</strong> This will permanently delete the entire game, including ALL cards, user decks, and collections for this game. This action cannot be undone.</p>
+                    <p style="margin-bottom: 5px;">To confirm deletion, type the name of the game exactly:<br><strong>"{{ selectedGame.name }}"</strong></p>
+                    <input type="text" v-model="deleteGameConfirmText" class="filter-input" style="width: 100%; box-sizing: border-box; margin-bottom: 20px;" placeholder="Type game name here..." />
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-outline" style="flex: 1;" @click="showDeleteGameModal = false; deleteGameConfirmText = ''">Cancel</button>
+                        <button class="btn btn-primary" style="flex: 1; background: red; border-color: red;" @click="executeDeleteGameConfirmed" :disabled="deleteGameConfirmText !== selectedGame.name">Delete Game</button>
+                    </div>
+                </div>
+            </div>
+
             <div v-else style="text-align: center; margin-top: 50px;">
                 <h3>Please open a game you administer from the sidebar to view the Admin Dashboard.</h3>
             </div>
@@ -557,25 +680,25 @@ export default {
 
         const executeDelete = async () => {
             if (!selectedCardId.value) return;
-            if (!confirm('Are you sure you want to delete this card?')) return;
-            
+            cardToDelete.value = selectedCardId.value;
+        };
+
+        const executeDeleteConfirmed = async () => {
+            if (!cardToDelete.value) return;
             saving.value = true;
             try {
                 const res = await fetch('api/admin_delete_card.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        game_id: selectedGameId.value,
-                        card_id: selectedCardId.value
-                    })
+                    body: JSON.stringify({ game_id: selectedGameId.value, card_id: cardToDelete.value })
                 });
-                
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
                 
-                store.addToast("Card deleted successfully", "success");
-                await fetchCards();
+                store.addToast("Card deleted.", "success");
+                cardToDelete.value = null;
                 resetCardForm();
+                await fetchCards();
             } catch (err) {
                 store.addToast(err.message, "error");
             } finally {
@@ -657,9 +780,180 @@ export default {
             }
         };
 
+        // ---- SETTINGS & MULTI-ADMIN ----
+        const isPublic = ref(false);
+        const savingVisibility = ref(false);
+        const generalSettings = ref({
+            name: '',
+            description: '',
+            cover_color: '#000000',
+            max_deck_size: 60,
+            max_copies_per_card: 4
+        });
+        const savingGeneralSettings = ref(false);
+        const newAdminUsername = ref('');
+        const grantingAdmin = ref(false);
+        const currentAdmins = ref([]);
+        const loadingAdmins = ref(false);
+        const cardToDelete = ref(null);
+        const adminToRevoke = ref(null);
+        const showDeleteGameModal = ref(false);
+        const deleteGameConfirmText = ref('');
+        
+        const isCreator = computed(() => {
+            return selectedGame.value && store.user && selectedGame.value.created_by === store.user.id;
+        });
+
+        watch(selectedGame, (game) => {
+            if (game) {
+                syncAdapter.value = game.import_adapter || 'generic';
+                isPublic.value = !!game.is_public;
+                generalSettings.value = {
+                    name: game.name || '',
+                    description: game.description || '',
+                    cover_color: game.cover_color || '#000000',
+                    max_deck_size: game.max_deck_size || 60,
+                    max_copies_per_card: game.max_copies_per_card || 4
+                };
+                if (activeTab.value === 'settings') fetchAdmins();
+            }
+        }, { immediate: true });
+
         watch(() => activeTab.value, (newTab) => {
             if (newTab === 'art') fetchArtSubmissions();
+            if (newTab === 'settings' && selectedGameId.value) fetchAdmins();
         });
+
+        const saveGeneralSettings = async () => {
+            savingGeneralSettings.value = true;
+            try {
+                const res = await fetch('api/admin_update_game.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_id: selectedGameId.value,
+                        ...generalSettings.value
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                store.addToast("General settings saved successfully", "success");
+                await store.fetchGames();
+            } catch (err) {
+                store.addToast(err.message, "error");
+            } finally {
+                savingGeneralSettings.value = false;
+            }
+        };
+
+        const saveVisibility = async () => {
+            savingVisibility.value = true;
+            try {
+                const res = await fetch('api/admin_update_game.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_id: selectedGameId.value,
+                        is_public: isPublic.value
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                if (selectedGame.value) selectedGame.value.is_public = isPublic.value;
+                store.addToast("Visibility saved successfully", "success");
+            } catch (err) {
+                store.addToast(err.message, "error");
+            } finally {
+                savingVisibility.value = false;
+            }
+        };
+
+        const fetchAdmins = async () => {
+            loadingAdmins.value = true;
+            try {
+                const res = await fetch('api/admin_get_roles.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: selectedGameId.value })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                currentAdmins.value = data.admins;
+            } catch (err) {
+                console.error(err);
+            } finally {
+                loadingAdmins.value = false;
+            }
+        };
+
+        const grantAdmin = async () => {
+            if (!newAdminUsername.value.trim()) return;
+            grantingAdmin.value = true;
+            try {
+                const res = await fetch('api/admin_manage_roles.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: selectedGameId.value, username: newAdminUsername.value.trim(), action: 'grant' })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                store.addToast(`Granted admin to ${newAdminUsername.value}`, "success");
+                newAdminUsername.value = '';
+                fetchAdmins();
+            } catch (err) {
+                store.addToast(err.message, "error");
+            } finally {
+                grantingAdmin.value = false;
+            }
+        };
+
+        const revokeAdmin = (username) => {
+            adminToRevoke.value = username;
+        };
+
+        const executeRevokeConfirmed = async () => {
+            if (!adminToRevoke.value) return;
+            try {
+                const res = await fetch('api/admin_manage_roles.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: selectedGameId.value, username: adminToRevoke.value, action: 'revoke' })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                store.addToast(`Revoked admin from ${adminToRevoke.value}`, "success");
+                adminToRevoke.value = null;
+                fetchAdmins();
+            } catch (err) {
+                store.addToast(err.message, "error");
+            }
+        };
+        
+        const deleteGame = () => {
+            deleteGameConfirmText.value = '';
+            showDeleteGameModal.value = true;
+        };
+
+        const executeDeleteGameConfirmed = async () => {
+            if (deleteGameConfirmText.value !== selectedGame.value.name) return;
+            try {
+                const res = await fetch('api/admin_delete_game.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: selectedGameId.value })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                
+                store.addToast("Game permanently deleted.", "success");
+                showDeleteGameModal.value = false;
+                store.selectedGameId = null;
+                store.currentView = null; // Clear view so it drops to landing page
+                await store.fetchGames(); // refresh sidebar list
+            } catch (err) {
+                store.addToast(err.message, "error");
+            }
+        };
         // ----------------------------
 
         return {
@@ -669,7 +963,8 @@ export default {
             saveRules, saveSchema, saveCard, saveCardFallback, deleteCard: executeDelete, deleteCardFallback: executeDelete, resetCardForm, setCardMode,
             syncFile, syncDragOver, syncing, syncResult, onSyncFileSelect, onSyncDrop, runSync,
             syncAdapter, saveAdapter,
-            artSubmissions, loadingArt, moderatingId, moderateArt
+            artSubmissions, loadingArt, moderatingId, moderateArt,
+            isPublic, savingVisibility, saveVisibility, generalSettings, savingGeneralSettings, saveGeneralSettings, newAdminUsername, grantingAdmin, grantAdmin, currentAdmins, loadingAdmins, revokeAdmin, isCreator, deleteGame, cardToDelete, executeDeleteConfirmed, adminToRevoke, executeRevokeConfirmed, showDeleteGameModal, deleteGameConfirmText, executeDeleteGameConfirmed
         }
     }
 }

@@ -65,6 +65,8 @@ export default {
                         </div>
                         <button class="btn btn-outline" @click="addSlot">+ Add Slot Requirement</button>
                     </div>
+
+
                 </div>
 
                 <div class="generator-scroll" v-if="activeTab === 'ai'" style="display: flex; flex-direction: column;">
@@ -123,6 +125,7 @@ export default {
         const addScoringRule = () => scoringRules.value.push({ weight: 10, filters: createDefaultFilter() });
         const removeScoringRule = (idx) => scoringRules.value.splice(idx, 1);
 
+
         const generateDeck = async () => {
             if (totalSlotCards.value > maxDeckSize.value) {
                 apiError.value = "You requested more cards than the deck size allows.";
@@ -156,7 +159,7 @@ export default {
                     store.addToast("Generation Warnings:\n- " + data.warnings.join("\n- "), 'warning');
                 }
 
-                emit('generated', data.deck);
+                emit('generated', { deck: data.deck });
                 emit('close');
             } catch (err) {
                 console.error(err);
@@ -168,46 +171,43 @@ export default {
 
         const activeTab = ref('ai');
         const aiPrompt = ref('');
-        const aiLogs = ref([]);
         const isGeneratingAI = ref(false);
+        const aiLogs = ref([]);
 
         const generateAIDeck = async () => {
-            if (!aiPrompt.value.trim()) return;
-            
             isGeneratingAI.value = true;
             apiError.value = '';
-            aiLogs.value = [];
+            aiLogs.value = ["Connecting to AI Agent..."];
 
             try {
-                const response = await fetch('api/llm_agent.php', {
+                const res = await fetch('api/llm_agent.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         game_id: props.game.id,
-                        prompt: aiPrompt.value.trim()
+                        prompt: aiPrompt.value
                     })
                 });
                 
-                const resData = await response.json();
+                const resData = await res.json();
                 
-                if (!response.ok || !resData.success) {
-                    throw new Error(resData.error || 'Unknown AI error');
-                }
-
                 if (resData.logs) {
                     aiLogs.value = resData.logs;
                 }
                 
                 if (resData.data && resData.data.deck) {
                     store.addToast("AI Explanation:\n" + resData.data.explanation, 'info', 0);
-                    emit('generated', resData.data.deck);
+                    
+                    emit('generated', {
+                        deck: resData.data.deck
+                    });
                     emit('close');
                 } else {
-                    throw new Error('AI failed to return a valid deck.');
+                    apiError.value = resData.error || "AI failed to generate a deck.";
                 }
             } catch (err) {
                 console.error(err);
-                apiError.value = err.message;
+                apiError.value = err.message || "Failed to contact AI.";
             } finally {
                 isGeneratingAI.value = false;
             }
@@ -223,4 +223,3 @@ export default {
         };
     }
 }
-

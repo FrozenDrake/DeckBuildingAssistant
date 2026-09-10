@@ -25,6 +25,9 @@
             <template v-if="store.currentView === 'admin'">
                 <admin-dashboard></admin-dashboard>
             </template>
+            <template v-else-if="store.currentView === 'create-game'">
+                <create-game></create-game>
+            </template>
             <template v-else-if="!store.selectedGameId">
                 <landing-page></landing-page>
             </template>

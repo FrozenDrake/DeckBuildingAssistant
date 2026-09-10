@@ -117,11 +117,17 @@ export default {
                     </div>
                 </div>
 
-                <!-- Active Deck Panel -->
                 <div class="active-deck-panel">
                     <div class="deck-header">
                         <h3>Current Deck ({{ deck.length }} / {{ maxDeckSize }})</h3>
                         <button class="btn btn-sm btn-outline" @click="clearDeck">Clear</button>
+                    </div>
+                    
+                    <div v-if="deckValidationWarnings.length > 0" style="padding: 10px; background: rgba(255, 165, 0, 0.1); border: 1px dashed orange; color: var(--text-color); border-radius: 4px; margin-bottom: 10px; font-size: 0.85em;">
+                        <strong style="display: block; margin-bottom: 5px; color: orange;">Deck Rule Warnings:</strong>
+                        <ul style="margin: 0; padding-left: 20px;">
+                            <li v-for="warn in deckValidationWarnings" :key="warn" style="margin-bottom: 3px;">{{ warn }}</li>
+                        </ul>
                     </div>
                     
                     <!-- Small deck layout (Slots) -->
@@ -246,7 +252,7 @@ export default {
                 fields: fields,
                 operators: {
                     text:     ['contains', 'does not contain', 'equals'],
-                    select:   ['equals', 'does not equal'],
+                    select:   ['equals', 'does not equal', 'contains', 'does not contain'],
                     number:   ['equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal'],
                     raw_path: ['contains', 'does not contain', 'equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal']
                 }
@@ -259,6 +265,77 @@ export default {
         const currentGame = computed(() => store.games.find(g => g.id === store.selectedGameId) || {});
         const maxDeckSize = computed(() => currentGame.value.max_deck_size || 60);
         const isSmallDeck = computed(() => maxDeckSize.value <= 10);
+
+        const deckValidationWarnings = computed(() => {
+            const getNestedValue = (obj, path) => {
+                if (!path) return undefined;
+                return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+            };
+
+            const resolveSchemaValue = (card, propKey) => {
+                const schema = currentGame.value.card_schema || [];
+                const fieldDef = schema.find(f => f.key === propKey || (f.key && propKey && f.key.toLowerCase() === propKey.toLowerCase()));
+                if (fieldDef && fieldDef.field === '__raw_path__' && fieldDef.rawPath) {
+                    if (fieldDef.rawPath.includes('.-1.') && card.raw_data) {
+                        const parts = fieldDef.rawPath.split('.-1.');
+                        const arrayObj = getNestedValue(card.raw_data, parts[0]);
+                        if (Array.isArray(arrayObj) && arrayObj.length > 0) {
+                            return getNestedValue(arrayObj[arrayObj.length - 1], parts[1]);
+                        }
+                    }
+                    return getNestedValue(card.raw_data, fieldDef.rawPath);
+                }
+                const path = fieldDef ? (fieldDef.field || fieldDef.key) : propKey;
+                return getNestedValue(card, path);
+            };
+
+            const warnings = [];
+            const deckRules = currentGame.value.deck_rules || [];
+            
+            for (const rule of deckRules) {
+                if (rule.type === 'aggregate_attribute') {
+                    const prop = rule.property;
+                    const operator = rule.operator; // 'sum' or 'average'
+                    const condition = rule.condition; // '>=', '<=', '==', '>', '<'
+                    const value = parseFloat(rule.value);
+                    
+                    if (!prop || !operator || !condition || isNaN(value)) continue;
+                    
+                    let validCardsCount = 0;
+                    let total = 0;
+                    
+                    for (const card of deck.value) {
+                        let val = resolveSchemaValue(card, prop);
+                        if (val !== undefined && val !== null && val !== '') {
+                            const parsed = parseFloat(val);
+                            if (!isNaN(parsed)) {
+                                total += parsed;
+                                validCardsCount++;
+                            }
+                        }
+                    }
+                    
+                    let aggregateVal = 0;
+                    if (operator === 'sum') {
+                        aggregateVal = total;
+                    } else if (operator === 'average') {
+                        aggregateVal = validCardsCount > 0 ? total / validCardsCount : 0;
+                    }
+                    
+                    let passes = true;
+                    if (condition === '>=') passes = aggregateVal >= value;
+                    else if (condition === '<=') passes = aggregateVal <= value;
+                    else if (condition === '==') passes = aggregateVal === value;
+                    else if (condition === '>') passes = aggregateVal > value;
+                    else if (condition === '<') passes = aggregateVal < value;
+                    
+                    if (!passes) {
+                        warnings.push(rule.error_message || `Aggregate rule failed: ${operator} of ${prop} must be ${condition} ${value} (Current: ${aggregateVal.toFixed(1)})`);
+                    }
+                }
+            }
+            return warnings;
+        });
 
         // Server-Side Data State
         const cards = ref([]);
@@ -288,7 +365,7 @@ export default {
                 if (res.ok) {
                     collectionCardIds.value = new Set((data.entries || []).map(e => e.card_id));
                 }
-            } catch (_) { /* silently ignore — collection filter just won't work */ }
+            } catch (_) { /* silently ignore - collection filter just won't work */ }
         };
 
         const toggleCollectionOnly = () => {
@@ -322,7 +399,7 @@ export default {
                     sorts: activeSortRules.value,
                     include_raw: true,
                     // When the collection filter is on, restrict results to owned card IDs.
-                    // An empty set means "no collection" — send null so backend doesn't add an impossible $in filter.
+                    // An empty set means "no collection" - send null so backend doesn't add an impossible $in filter.
                     ...(collectionOnly.value && collectionCardIds.value.size > 0
                         ? { card_ids: Array.from(collectionCardIds.value) }
                         : {}),
@@ -485,8 +562,14 @@ export default {
             }
         };
 
-        const onDeckGenerated = (generatedDeck) => {
-            deck.value = generatedDeck;
+        const onDeckGenerated = (result) => {
+            if (!result) return;
+            if (Array.isArray(result)) {
+                // Backward compatibility just in case
+                deck.value = result;
+            } else {
+                deck.value = result.deck || [];
+            }
         };
 
         const onQueryUpdated = (query) => { activeFilterQuery.value = query; };
@@ -505,7 +588,9 @@ export default {
             }
 
             const currentCount = deck.value.filter(c => c.id === card.id).length;
-            const maxCopies = currentGame.value.max_copies_per_card || 4;
+            const maxCopies = (card.max_copies !== undefined && card.max_copies !== null && card.max_copies !== '') 
+                ? parseInt(card.max_copies) 
+                : (currentGame.value.max_copies_per_card || 4);
             if (currentCount >= maxCopies) {
                 store.addToast(`You can only have up to ${maxCopies} copies of this card.`, 'warning');
                 return;
@@ -602,7 +687,7 @@ export default {
         });
 
         return {
-            store, currentGame, maxDeckSize, isSmallDeck,
+            store, currentGame, maxDeckSize, isSmallDeck, deckValidationWarnings,
             renderedCards, totalCards, allLoaded, isLoading, searchQuery,
             showSortTray, showFilterTray, filterSchema,
             activeFilterCount, activeSortCount, onQueryUpdated, resetFilter, onSortUpdated,

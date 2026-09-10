@@ -34,6 +34,12 @@ export default {
                     <div class="subheader-controls" v-if="store.user">
                         <input type="text" v-model="searchQuery" class="filter-input"
                                placeholder="Search cards..." style="min-width: 200px;" />
+                        
+                        <input type="file" ref="csvInput" style="display: none;" accept=".csv" @change="handleCsvUpload" />
+                        <button class="btn btn-primary btn-sm" @click="promptCsvUpload" :disabled="isUploading">
+                            {{ isUploading ? 'Importing...' : 'Import CSV' }}
+                        </button>
+                               
                         <button class="btn btn-outline btn-sm"
                                 @click="showSortTray = !showSortTray"
                                 :class="{ active: showSortTray }">
@@ -86,7 +92,12 @@ export default {
                                     <span class="db-card-type">{{ card.type }}</span>
                                 </div>
                                 <div class="db-card-name">{{ card.name }}</div>
-                                <div class="db-card-chars" v-if="collectionQty(card) > 0" style="opacity: 0.7; font-size: 0.8em;">
+                                
+                                <div class="db-card-art-container">
+                                    <img v-if="card.image_url" :src="card.image_url" class="db-card-art" />
+                                </div>
+                                
+                                <div class="db-card-chars" v-if="collectionQty(card) > 0" style="opacity: 0.7; font-size: 0.8em; margin-top: 5px; text-align: center;">
                                     Owned: {{ collectionQty(card) }}
                                 </div>
                             </div>
@@ -117,8 +128,12 @@ export default {
                                          v-for="entry in group.entries" :key="entry.card_id"
                                          @click="removeFromCollection(entry)"
                                          :title="'Click to remove one copy of ' + entry.name">
-                                        <span class="deck-list-name">{{ entry.name }}</span>
-                                        <span class="deck-list-qty">x{{ entry.qty }}</span>
+                                        <img v-if="entry.image_url" :src="entry.image_url" class="deck-list-art" />
+                                        <div v-else class="deck-list-art"></div>
+                                        <div class="deck-list-info">
+                                            <span class="deck-list-name">{{ entry.name }}</span>
+                                            <span class="deck-list-qty">x{{ entry.qty }}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -151,7 +166,7 @@ export default {
                 fields,
                 operators: {
                     text:   ['contains', 'does not contain', 'equals'],
-                    select: ['equals', 'does not equal'],
+                    select: ['equals', 'does not equal', 'contains', 'does not contain'],
                     number: ['equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal'],
                 },
             };
@@ -334,6 +349,43 @@ export default {
             return groups;
         });
 
+        // CSV Upload Logic
+        const csvInput = ref(null);
+        const isUploading = ref(false);
+
+        const promptCsvUpload = () => {
+            store.addToast("Note: The CSV importer expects columns for Card Name (or ID) and Count (or Quantity). Headers are auto-detected.", 'info', 0);
+            if (csvInput.value) csvInput.value.click();
+        };
+
+        const handleCsvUpload = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            isUploading.value = true;
+            const formData = new FormData();
+            formData.append('csv', file);
+            formData.append('game_id', currentGame.value.id);
+
+            try {
+                const res = await fetch('api/import_collection.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                
+                store.addToast(`Import successful! Added ${data.cards_added} cards.`, 'success');
+                await fetchCollection();
+            } catch (err) {
+                console.error(err);
+                store.addToast(err.message, 'error');
+            } finally {
+                isUploading.value = false;
+                if (csvInput.value) csvInput.value.value = ''; // Reset input
+            }
+        };
+
         return {
             store, currentGame,
             showSortTray, showFilterTray,
@@ -344,6 +396,7 @@ export default {
             collectionEntries, collectionTotalCount, groupedCollection,
             addToCollection, removeFromCollection,
             isInCollection, collectionQty,
+            csvInput, isUploading, promptCsvUpload, handleCsvUpload
         };
     }
 }

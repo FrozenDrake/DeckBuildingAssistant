@@ -1,5 +1,13 @@
 <?php
+session_start();
 header('Content-Type: application/json');
+
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    die(json_encode(['success' => false, 'error' => 'You must be logged in to use AI features.']));
+}
+
+require_once __DIR__ . '/rate_limit.php';
 
 $input = json_decode(file_get_contents('php://input'), true);
 $gameId = $input['game_id'] ?? null;
@@ -18,6 +26,12 @@ if (empty($apiKey) || $apiKey === 'YOUR_KEY_HERE') {
 
 $m = new MongoDB\Driver\Manager(getenv('MONGO_URI'));
 
+$rl = checkRateLimit($m, $_SESSION['user_id'], 'ai', 20);
+if (!$rl['allowed']) {
+    http_response_code(429);
+    die(json_encode(['success' => false, 'error' => $rl['error']]));
+}
+
 // Fetch game schema
 $query = new MongoDB\Driver\Query(['_id' => new MongoDB\BSON\ObjectId($gameId)]);
 $game = current($m->executeQuery('deckbuilder.games', $query)->toArray());
@@ -25,9 +39,20 @@ $schemaStr = json_encode($game->card_schema);
 $deckRules = json_encode($game->deck_rules ?? []);
 $maxDeckSize = $game->max_deck_size ?? 60;
 
-$systemInstruction = "You are an expert Deck Builder AI Agent for the game '{$game->name}'.
-You will help the user build an optimal deck of exactly {$maxDeckSize} cards based on their prompt.
-The game schema is: {$schemaStr}.
+// Fetch a single card to show the LLM the exact document structure
+$cardQuery = new MongoDB\Driver\Query(['game_id' => $gameId], ['limit' => 1, 'projection' => ['raw_data' => 0, '_id' => 0, 'game_id' => 0]]);
+$sampleCard = current($m->executeQuery('deckbuilder.cards', $cardQuery)->toArray());
+$sampleCardStr = json_encode($sampleCard, JSON_PRETTY_PRINT);
+
+$systemInstruction = "You are an expert deck builder for the game '{$game->name}'.
+You must generate a synergistic deck of exactly {$maxDeckSize} cards based on the user's prompt.
+
+CARD SCHEMA (Top-level metadata):
+{$schemaStr}
+
+SAMPLE CARD DOCUMENT (Reference this for nested structures like 'skills.name_en'):
+{$sampleCardStr}
+
 The game rules are: {$deckRules}.
 
 You have access to tools:
@@ -249,6 +274,7 @@ if ($finalJson && isset($finalJson['card_ids'])) {
     }
     
     $finalJson['deck'] = $deckCards;
+    incrementRateLimit($m, $_SESSION['user_id'], 'ai');
     echo json_encode(['success' => true, 'data' => $finalJson, 'logs' => $agentLogs]);
 } else {
     echo json_encode(['success' => false, 'error' => 'Failed to generate a deck within turn limit.', 'raw' => $response]);

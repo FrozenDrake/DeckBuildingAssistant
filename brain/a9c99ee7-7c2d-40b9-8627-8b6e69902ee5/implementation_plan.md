@@ -1,39 +1,37 @@
-# Phase 5: LLM-Assisted Deck Generator & Search (Tool-Calling Agent)
-
-To support massive games like Magic: The Gathering (30,000+ cards) without blowing up the context window or causing massive latency, the AI will act as an autonomous agent equipped with **Function Calling (Tools)**. Instead of dumping the whole database into its prompt, we give it a tool to query the database itself.
-
-## User Review Required
-
-> [!IMPORTANT]
-> **API Key Setup**: You will need to generate a free Gemini API key from Google AI Studio. We will need to inject this into your local Docker environment via a `.env` file before the feature can work.
+# Phase 7: Platform & Game Management
 
 ## Proposed Changes
 
-### Backend LLM Integration
-#### [NEW] `src/api/llm_agent.php`
-- Receives the user's natural language prompt and their `game_id`.
-- Initializes a multi-turn conversation with the `gemini-1.5-flash` API.
-- **Equips the AI with Tools:**
-  1. `googleSearch`: Built-in Gemini tool to browse the live web for meta/tier lists.
-  2. `query_card_database(complex_filters)`: A custom function we define in the API payload. When the AI calls this, PHP intercepts it, runs the AI's requested filters through our existing MongoDB ComplexFilter engine, and returns a minified list of matching cards back to the AI.
-- **The Agent Loop:**
-  1. The AI searches the web for the meta.
-  2. The AI repeatedly calls `query_card_database` to find specific cards (e.g. "Find me red creatures under 3 mana").
-  3. Once it has gathered the best candidates in its working memory, it evaluates their specific synergies.
-  4. It returns the final structured JSON: `{ "explanation": "...", "card_ids": [...] }`.
+### 1. Game Creation Suite
+- **[NEW] `src/js/pages/CreateGame.js`**: A frontend page with a simple form (Game Name, Game Description).
+- **[MODIFY] `src/js/components/NavBar.js`**: Add a "Create Game" link.
+- **[NEW] `src/api/create_game.php`**: 
+  - Validates authentication.
+  - Inserts a new document into `deckbuilder.games` with `is_public: false` and default empty schema/rules.
+  - Pushes the new game's `_id` into the authenticated user's `admin_games` array in `deckbuilder.users`, making them the owner.
 
-### Frontend UI Updates
-#### [MODIFY] `src/js/components/DeckGeneratorModal.js`
-- Redesign the modal to have two tabs: **Algorithmic (Fast)** and **AI Agent (Smart)**.
-- Displays a dynamic loading status that updates as the agent works (e.g., *"Searching the web..."* -> *"Querying the database for Speed cards..."* -> *"Evaluating synergies..."*).
-- Upon success, directly populates the Current Deck panel with the exact cards the AI picked and displays the AI's `explanation` text.
+### 2. Public / Private Games
+- **[MODIFY] `src/js/pages/AdminDashboard.js`**: 
+  - Add a "Visibility Settings" panel with a toggle for Public/Private.
+- **[MODIFY] `src/api/admin_update_game.php`**:
+  - Accept and update the `is_public` boolean on the game document.
+- **[MODIFY] `src/api/get_games.php`**:
+  - Check `$_SESSION['user_id']` and their `admin_games`.
+  - Only return games where `is_public == true` OR the game's ID is in the user's `admin_games` array.
 
-#### [MODIFY] `docker-compose.yml`
-- Expose a `GEMINI_API_KEY` environment variable to the `web` container.
+### 3. Multi-Admin Management
+- **[MODIFY] `src/js/pages/AdminDashboard.js`**:
+  - Add an "Admin Management" panel.
+  - An input to enter a username, and a button to "Grant Admin".
+  - A list of current admins, with a button to "Revoke Admin".
+- **[NEW] `src/api/admin_manage_roles.php`**:
+  - Validates the current user is an admin of the game.
+  - Accepts a `target_username` and `action` (grant/revoke).
+  - Pushes or pulls the game's `_id` from the target user's `admin_games` array in `deckbuilder.users`.
+- **[NEW] `src/api/admin_get_roles.php`**:
+  - Returns a list of usernames who have this game in their `admin_games` array.
 
-## Verification Plan
-
-### Manual Verification
-1. Insert a test `GEMINI_API_KEY` into `.env`.
-2. Type: *"Build a deck focused on corner acceleration for front runners based on the current tier list."*
-3. Verify the LLM successfully hits the web, makes tool calls to `query_card_database`, and returns a highly synergistic deck with a coherent strategic explanation.
+## Verification
+- Test creating a game and ensuring it appears only to the creator.
+- Test toggling it to public and ensuring an incognito window can see it.
+- Test granting admin rights to a test user and ensuring they can access the Admin Dashboard for that game.

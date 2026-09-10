@@ -1386,3 +1386,6 @@ body {
 .mod-item-actions button {
     flex: 1;
 }
+
+.add-game-btn { color: var(--primary-color); }
+.add-game-btn:hover { color: var(--bg-color) !important; }

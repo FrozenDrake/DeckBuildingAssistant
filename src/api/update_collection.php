@@ -69,6 +69,11 @@ try {
         // Add one copy
         if ($idx !== null) {
             $entries[$idx]['qty']++;
+            // Always refresh snapshot to patch missing fields (like image_url) from legacy entries
+            $entries[$idx]['name']      = $card['name'] ?? $entries[$idx]['name'];
+            $entries[$idx]['rarity']    = $card['rarity'] ?? $entries[$idx]['rarity'];
+            $entries[$idx]['type']      = $card['type'] ?? $entries[$idx]['type'];
+            $entries[$idx]['image_url'] = $card['image_url'] ?? $entries[$idx]['image_url'] ?? '';
         } else {
             // Store a snapshot of relevant card fields alongside the id and qty
             $snapshot = [
@@ -76,7 +81,7 @@ try {
                 'qty'     => 1,
                 'name'    => $card['name']   ?? 'Unknown',
                 'rarity'  => $card['rarity'] ?? '',
-                'type'    => $card['type']   ?? '',
+                'type'    => $card['type']   ?? '', 'image_url' => $card['image_url'] ?? '',
             ];
             $entries[] = $snapshot;
         }

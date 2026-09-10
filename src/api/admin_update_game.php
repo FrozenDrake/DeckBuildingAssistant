@@ -17,8 +17,26 @@ if (array_key_exists('deck_rules', $input)) {
 if (array_key_exists('card_schema', $input)) {
     $updateFields['card_schema'] = $input['card_schema'];
 }
+if (array_key_exists('is_public', $input)) {
+    $updateFields['is_public'] = (bool)$input['is_public'];
+}
 if (array_key_exists('import_adapter', $input)) {
     $updateFields['import_adapter'] = $input['import_adapter'];
+}
+if (array_key_exists('name', $input)) {
+    $updateFields['name'] = trim($input['name']);
+}
+if (array_key_exists('description', $input)) {
+    $updateFields['description'] = trim($input['description']);
+}
+if (array_key_exists('cover_color', $input)) {
+    $updateFields['cover_color'] = trim($input['cover_color']);
+}
+if (array_key_exists('max_deck_size', $input)) {
+    $updateFields['max_deck_size'] = (int)$input['max_deck_size'];
+}
+if (array_key_exists('max_copies_per_card', $input)) {
+    $updateFields['max_copies_per_card'] = (int)$input['max_copies_per_card'];
 }
 
 if (!$gameId || empty($updateFields)) {

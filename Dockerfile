@@ -20,3 +20,11 @@ RUN a2enmod rewrite
 # Increase upload limits for large JSON card dumps
 RUN echo "upload_max_filesize = 32M\npost_max_size = 64M\nmemory_limit = 128M" \
     > /usr/local/etc/php/conf.d/uploads.ini
+
+# Copy application files into the container
+COPY src /var/www/html
+
+# Ensure the upload directory exists and is writable by Apache
+RUN mkdir -p /var/www/html/images/submissions \
+    && chown -R www-data:www-data /var/www/html/images/submissions \
+    && chmod -R 775 /var/www/html/images/submissions

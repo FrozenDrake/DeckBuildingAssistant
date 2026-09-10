@@ -164,7 +164,7 @@ export default {
                 ],
                 operators: {
                     text:   ['contains', 'does not contain', 'equals'],
-                    select: ['equals', 'does not equal'],
+                    select: ['equals', 'does not equal', 'contains', 'does not contain'],
                     number: ['equals', 'does not equal', 'greater than', 'less than', 'greater than or equal', 'less than or equal'],
                 },
             };

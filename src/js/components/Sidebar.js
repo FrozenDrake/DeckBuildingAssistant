@@ -31,6 +31,13 @@ export default {
                 <div class="game-item" v-if="filteredGames.length === 0 && isSidebarOpen" style="justify-content: center; opacity: 0.7; cursor: default;">
                     No games found.
                 </div>
+                
+                <div class="game-item add-game-btn" v-if="isSidebarOpen && store.user" @click="store.currentView = 'create-game'" style="margin-top: 15px; justify-content: center; border: 1px dashed var(--border-color);">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="margin-right: 8px;">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                    </svg>
+                    Create New Game
+                </div>
             </div>
         </div>
     `,

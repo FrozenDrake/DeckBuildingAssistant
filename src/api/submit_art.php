@@ -7,6 +7,15 @@ if (!isset($_SESSION['user_id'])) {
     die(json_encode(['error' => 'Must be logged in to submit art.']));
 }
 
+require_once __DIR__ . '/rate_limit.php';
+
+$m = new MongoDB\Driver\Manager(getenv('MONGO_URI'));
+$rl = checkRateLimit($m, $_SESSION['user_id'], 'art', 20);
+if (!$rl['allowed']) {
+    http_response_code(429);
+    die(json_encode(['error' => $rl['error']]));
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     die(json_encode(['error' => 'Method not allowed.']));
@@ -112,6 +121,8 @@ try {
     
     $bulk->insert($submission);
     $m->executeBulkWrite('deckbuilder.image_submissions', $bulk);
+    
+    incrementRateLimit($m, $_SESSION['user_id'], 'art');
     
     echo json_encode(['success' => true, 'message' => 'Art submitted for moderation.']);
 } catch (Exception $e) {
